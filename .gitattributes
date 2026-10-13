@@ -1,0 +1,7 @@
+# Finales de línea LF en el repositorio y en las copias de trabajo (coincide con
+# .editorconfig). Los scripts .sh con CRLF fallan en Linux/macOS.
+* text=auto eol=lf
+*.png binary
+*.jpg binary
+*.keystore binary
+*.apk binary

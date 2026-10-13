@@ -1,0 +1,94 @@
+table Entregas
+
+	measure 'Entregas confirmadas' = CALCULATE(COUNTROWS(Entregas), Entregas[estado] = "CONFIRMADA")
+		formatString: #,0
+		displayFolder: Entregas
+
+	measure 'Entregas rechazadas' = CALCULATE(COUNTROWS(Entregas), Entregas[estado] = "RECHAZADA")
+		formatString: #,0
+		displayFolder: Entregas
+
+	/// Las entregas anuladas (correcciones) no cuentan.
+	measure '% Entregas exitosas' = DIVIDE([Entregas confirmadas], [Entregas confirmadas] + [Entregas rechazadas])
+		formatString: 0.0%
+		displayFolder: Entregas
+
+	/// Distancia entre el GPS de la entrega y la ubicación registrada del cliente.
+	measure 'Distancia al cliente (prom. m)' = CALCULATE(AVERAGE(Entregas[distancia_cliente_metros]), Entregas[estado] = "CONFIRMADA")
+		formatString: #,0
+		displayFolder: Entregas
+
+	column entrega_id
+		dataType: string
+		summarizeBy: none
+		sourceColumn: entrega_id
+		isHidden
+
+	column factura_id
+		dataType: string
+		summarizeBy: none
+		sourceColumn: factura_id
+		isHidden
+
+	column manifiesto_id
+		dataType: string
+		summarizeBy: none
+		sourceColumn: manifiesto_id
+		isHidden
+
+	column chofer_id
+		dataType: string
+		summarizeBy: none
+		sourceColumn: chofer_id
+		isHidden
+
+	column estado
+		dataType: string
+		summarizeBy: none
+		sourceColumn: estado
+
+	column fecha
+		dataType: dateTime
+		formatString: Short Date
+		summarizeBy: none
+		sourceColumn: fecha
+
+	column cliente_id
+		dataType: string
+		summarizeBy: none
+		sourceColumn: cliente_id
+		isHidden
+
+	column ruta_id
+		dataType: string
+		summarizeBy: none
+		sourceColumn: ruta_id
+		isHidden
+
+	column vendedor_id
+		dataType: string
+		summarizeBy: none
+		sourceColumn: vendedor_id
+		isHidden
+
+	column distancia_cliente_metros
+		dataType: double
+		formatString: #,0.00
+		summarizeBy: none
+		sourceColumn: distancia_cliente_metros
+
+	column motivo_rechazo
+		dataType: string
+		summarizeBy: none
+		sourceColumn: motivo_rechazo
+
+	partition Entregas = m
+		mode: import
+		source =
+				let
+				    Origen = PostgreSQL.Database(Servidor, BaseDatos),
+				    Vista = Origen{[Schema = "bi", Item = "v_entregas"]}[Data],
+				    Columnas = Table.SelectColumns(Vista, {"entrega_id", "factura_id", "manifiesto_id", "chofer_id", "estado", "fecha", "cliente_id", "ruta_id", "vendedor_id", "distancia_cliente_metros", "motivo_rechazo"}),
+				    Tipos = Table.TransformColumnTypes(Columnas, {{"entrega_id", type text}, {"factura_id", type text}, {"manifiesto_id", type text}, {"chofer_id", type text}, {"estado", type text}, {"fecha", type date}, {"cliente_id", type text}, {"ruta_id", type text}, {"vendedor_id", type text}, {"distancia_cliente_metros", type number}, {"motivo_rechazo", type text}})
+				in
+				    Tipos

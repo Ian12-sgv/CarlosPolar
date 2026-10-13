@@ -1,0 +1,28 @@
+table Rutas
+
+	column ruta_id
+		dataType: string
+		summarizeBy: none
+		sourceColumn: ruta_id
+		isHidden
+
+	column codigo
+		dataType: string
+		summarizeBy: none
+		sourceColumn: codigo
+
+	column nombre
+		dataType: string
+		summarizeBy: none
+		sourceColumn: nombre
+
+	partition Rutas = m
+		mode: import
+		source =
+				let
+				    Origen = PostgreSQL.Database(Servidor, BaseDatos),
+				    Vista = Origen{[Schema = "bi", Item = "v_dim_rutas"]}[Data],
+				    Columnas = Table.SelectColumns(Vista, {"ruta_id", "codigo", "nombre"}),
+				    Tipos = Table.TransformColumnTypes(Columnas, {{"ruta_id", type text}, {"codigo", type text}, {"nombre", type text}})
+				in
+				    Tipos

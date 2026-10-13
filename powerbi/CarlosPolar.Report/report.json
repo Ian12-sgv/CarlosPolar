@@ -1,0 +1,73 @@
+{
+  "config": "{\"version\": \"5.59\", \"themeCollection\": {}, \"activeSectionIndex\": 0}",
+  "layoutOptimization": 0,
+  "resourcePackages": [],
+  "sections": [
+    {
+      "name": "Seccion0",
+      "displayName": "Resumen",
+      "displayOption": 1,
+      "filters": "[]",
+      "config": "{}",
+      "height": 720,
+      "width": 1280,
+      "ordinal": 0,
+      "visualContainers": []
+    },
+    {
+      "name": "Seccion1",
+      "displayName": "Ventas",
+      "displayOption": 1,
+      "filters": "[]",
+      "config": "{}",
+      "height": 720,
+      "width": 1280,
+      "ordinal": 1,
+      "visualContainers": []
+    },
+    {
+      "name": "Seccion2",
+      "displayName": "Operación",
+      "displayOption": 1,
+      "filters": "[]",
+      "config": "{}",
+      "height": 720,
+      "width": 1280,
+      "ordinal": 2,
+      "visualContainers": []
+    },
+    {
+      "name": "Seccion3",
+      "displayName": "Cobranza",
+      "displayOption": 1,
+      "filters": "[]",
+      "config": "{}",
+      "height": 720,
+      "width": 1280,
+      "ordinal": 3,
+      "visualContainers": []
+    },
+    {
+      "name": "Seccion4",
+      "displayName": "Inventario",
+      "displayOption": 1,
+      "filters": "[]",
+      "config": "{}",
+      "height": 720,
+      "width": 1280,
+      "ordinal": 4,
+      "visualContainers": []
+    },
+    {
+      "name": "Seccion5",
+      "displayName": "Campo",
+      "displayOption": 1,
+      "filters": "[]",
+      "config": "{}",
+      "height": 720,
+      "width": 1280,
+      "ordinal": 5,
+      "visualContainers": []
+    }
+  ]
+}

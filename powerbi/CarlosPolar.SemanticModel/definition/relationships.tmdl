@@ -1,0 +1,127 @@
+relationship 012cf008-5f55-533c-8340-66e41ffa4221
+	fromColumn: Ventas.fecha
+	toColumn: Calendario.Fecha
+
+relationship 6dcd2fc8-5092-5a47-b3ff-5cb70e74e862
+	fromColumn: Pedidos.fecha
+	toColumn: Calendario.Fecha
+
+relationship e2344600-8c2b-5987-bff8-705d635d3558
+	fromColumn: Embudo.fecha
+	toColumn: Calendario.Fecha
+
+relationship 1886a4dd-5f0f-554a-979c-fbbe855a5ec0
+	fromColumn: Tiempos.fecha
+	toColumn: Calendario.Fecha
+
+relationship 3529cfbf-862b-51db-b9fa-be60af856e94
+	fromColumn: Entregas.fecha
+	toColumn: Calendario.Fecha
+
+relationship 924a61c3-a13d-5103-9a30-7618cc010ae0
+	fromColumn: Pagos.fecha
+	toColumn: Calendario.Fecha
+
+relationship 01c46b9b-f6b0-5a2b-83e3-a4de4b00a39d
+	fromColumn: Visitas.fecha
+	toColumn: Calendario.Fecha
+
+relationship d117506e-5154-5838-bf7a-42db552c4f67
+	fromColumn: Sincronizacion.fecha
+	toColumn: Calendario.Fecha
+
+relationship b6cc48ae-bd91-5e12-a47b-5fef3a2cd280
+	fromColumn: Ventas.cliente_id
+	toColumn: Clientes.cliente_id
+
+relationship 0d30ae5d-b6f9-585e-828f-d72acd969c77
+	fromColumn: Pedidos.cliente_id
+	toColumn: Clientes.cliente_id
+
+relationship dc884662-1272-5d09-bb78-08e85a79d834
+	fromColumn: Embudo.cliente_id
+	toColumn: Clientes.cliente_id
+
+relationship 492a88a5-d8b4-5650-8bca-11f13457734a
+	fromColumn: Tiempos.cliente_id
+	toColumn: Clientes.cliente_id
+
+relationship a659d434-34e9-53dc-a062-7ae6b14948a9
+	fromColumn: Entregas.cliente_id
+	toColumn: Clientes.cliente_id
+
+relationship 8ee06918-080e-53e1-be44-a708d0be0833
+	fromColumn: Cartera.cliente_id
+	toColumn: Clientes.cliente_id
+
+relationship d5a2d3f8-6d5c-58f7-8275-1b0a011f846a
+	fromColumn: Pagos.cliente_id
+	toColumn: Clientes.cliente_id
+
+relationship 69c02de6-568e-5b31-b79b-1bdc13105427
+	fromColumn: Ventas.producto_id
+	toColumn: Productos.producto_id
+
+relationship 46ba5596-2e2c-563e-b94b-2ce8ce85a7a7
+	fromColumn: Embudo.producto_id
+	toColumn: Productos.producto_id
+
+relationship de5b9650-b5b1-5a51-a6cc-dc9246723147
+	fromColumn: Existencias.producto_id
+	toColumn: Productos.producto_id
+
+relationship b891feea-1935-5697-8ef7-ee6186386bb9
+	fromColumn: Cuadre.producto_id
+	toColumn: Productos.producto_id
+
+relationship 7f2aed94-e5b8-5fd7-af33-857882f87d45
+	fromColumn: Ventas.vendedor_id
+	toColumn: Vendedores.vendedor_id
+
+relationship e5129b9a-48d6-55ca-aee8-f27d411f4856
+	fromColumn: Pedidos.vendedor_id
+	toColumn: Vendedores.vendedor_id
+
+relationship 56e5824e-50cc-5e5a-8ec4-a58fc2dcb0b0
+	fromColumn: Embudo.vendedor_responsable_id
+	toColumn: Vendedores.vendedor_id
+
+relationship 26d5d037-400f-51b7-9463-4a5b6ae28225
+	fromColumn: Tiempos.vendedor_id
+	toColumn: Vendedores.vendedor_id
+
+relationship 399f2556-9432-5d48-9b2e-d65d0448ef09
+	fromColumn: Cartera.vendedor_id
+	toColumn: Vendedores.vendedor_id
+
+relationship 739a8aef-0fb2-5b73-852a-36afa74283ba
+	fromColumn: Pagos.vendedor_id
+	toColumn: Vendedores.vendedor_id
+
+relationship be96902f-4e48-5b10-802b-654578f08c5b
+	fromColumn: Visitas.vendedor_id
+	toColumn: Vendedores.vendedor_id
+
+relationship 525f9d03-c765-5199-bcf3-92d70c6891a6
+	fromColumn: Ventas.ruta_id
+	toColumn: Rutas.ruta_id
+
+relationship 2629663e-1119-5c52-a9e7-4933d37bf504
+	fromColumn: Pedidos.ruta_id
+	toColumn: Rutas.ruta_id
+
+relationship d045a9d6-110a-5dc0-a4ad-c56546fcd24e
+	fromColumn: Entregas.ruta_id
+	toColumn: Rutas.ruta_id
+
+relationship 0a61ba19-ff3d-5430-8982-83634779bc3c
+	fromColumn: Cartera.ruta_id
+	toColumn: Rutas.ruta_id
+
+relationship bfeb1dd5-57fa-5d03-8d64-a83e05012606
+	fromColumn: Entregas.chofer_id
+	toColumn: Choferes.chofer_id
+
+relationship 9aa0fbdc-6fa2-5f4d-a3e7-98452c9aa31e
+	fromColumn: Cuadre.chofer_id
+	toColumn: Choferes.chofer_id

@@ -1,0 +1,5 @@
+/// Servidor PostgreSQL (host:puerto).
+expression Servidor = "localhost:5432" meta [IsParameterQuery = true, Type = "Text", IsParameterQueryRequired = true]
+
+/// Base de datos del sistema.
+expression BaseDatos = "carlos_polar" meta [IsParameterQuery = true, Type = "Text", IsParameterQueryRequired = true]

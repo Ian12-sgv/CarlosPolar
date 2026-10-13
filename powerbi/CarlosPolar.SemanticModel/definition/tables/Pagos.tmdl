@@ -1,0 +1,100 @@
+table Pagos
+
+	measure 'Cobrado validado USD' = CALCULATE(SUM(Pagos[monto_usd]), Pagos[estado] = "VALIDADO")
+		formatString: \$#,0.00
+		displayFolder: Cobranza
+
+	measure 'Pagos por validar' = CALCULATE(COUNTROWS(Pagos), Pagos[estado] = "REGISTRADO")
+		formatString: #,0
+		displayFolder: Cobranza
+
+	measure 'Pagos por validar USD' = CALCULATE(SUM(Pagos[monto_usd]), Pagos[estado] = "REGISTRADO")
+		formatString: \$#,0.00
+		displayFolder: Cobranza
+
+	measure 'Pagos rechazados' = CALCULATE(COUNTROWS(Pagos), Pagos[estado] = "RECHAZADO")
+		formatString: #,0
+		displayFolder: Cobranza
+
+	/// Desde que se registra el pago hasta que Administración lo valida.
+	measure 'Horas de validación (prom.)' = AVERAGE(Pagos[horas_validacion])
+		formatString: #,0.0
+		displayFolder: Cobranza
+
+	/// Efectividad de cobranza del período (cobrado validado / facturado).
+	measure 'Cobranza sobre ventas' = DIVIDE([Cobrado validado USD], [Ventas USD])
+		formatString: 0.0%
+		displayFolder: Cobranza
+
+	column pago_id
+		dataType: string
+		summarizeBy: none
+		sourceColumn: pago_id
+		isHidden
+
+	column fecha
+		dataType: dateTime
+		formatString: Short Date
+		summarizeBy: none
+		sourceColumn: fecha
+
+	column cliente_id
+		dataType: string
+		summarizeBy: none
+		sourceColumn: cliente_id
+		isHidden
+
+	column vendedor_id
+		dataType: string
+		summarizeBy: none
+		sourceColumn: vendedor_id
+		isHidden
+
+	column metodo_pago
+		dataType: string
+		summarizeBy: none
+		sourceColumn: metodo_pago
+
+	column moneda
+		dataType: string
+		summarizeBy: none
+		sourceColumn: moneda
+
+	column monto_total
+		dataType: double
+		formatString: #,0.00
+		summarizeBy: none
+		sourceColumn: monto_total
+
+	column monto_usd
+		dataType: double
+		formatString: #,0.00
+		summarizeBy: none
+		sourceColumn: monto_usd
+
+	column estado
+		dataType: string
+		summarizeBy: none
+		sourceColumn: estado
+
+	column horas_validacion
+		dataType: double
+		formatString: #,0.00
+		summarizeBy: none
+		sourceColumn: horas_validacion
+
+	column con_evidencia
+		dataType: boolean
+		summarizeBy: none
+		sourceColumn: con_evidencia
+
+	partition Pagos = m
+		mode: import
+		source =
+				let
+				    Origen = PostgreSQL.Database(Servidor, BaseDatos),
+				    Vista = Origen{[Schema = "bi", Item = "v_pagos"]}[Data],
+				    Columnas = Table.SelectColumns(Vista, {"pago_id", "fecha", "cliente_id", "vendedor_id", "metodo_pago", "moneda", "monto_total", "monto_usd", "estado", "horas_validacion", "con_evidencia"}),
+				    Tipos = Table.TransformColumnTypes(Columnas, {{"pago_id", type text}, {"fecha", type date}, {"cliente_id", type text}, {"vendedor_id", type text}, {"metodo_pago", type text}, {"moneda", type text}, {"monto_total", type number}, {"monto_usd", type number}, {"estado", type text}, {"horas_validacion", type number}, {"con_evidencia", type logical}})
+				in
+				    Tipos

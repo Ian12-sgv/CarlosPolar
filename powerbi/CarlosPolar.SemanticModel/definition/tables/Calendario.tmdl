@@ -1,0 +1,54 @@
+table Calendario
+	dataCategory: Time
+
+	column Fecha
+		dataType: dateTime
+		isKey
+		formatString: Short Date
+		summarizeBy: none
+		sourceColumn: [Fecha]
+
+	column Año
+		dataType: int64
+		formatString: 0
+		summarizeBy: none
+		sourceColumn: [Año]
+
+	column Mes
+		dataType: int64
+		formatString: 0
+		summarizeBy: none
+		sourceColumn: [Mes]
+
+	column 'Nombre del mes'
+		dataType: string
+		summarizeBy: none
+		sourceColumn: [Nombre del mes]
+		sortByColumn: Mes
+
+	column 'Año-Mes'
+		dataType: string
+		summarizeBy: none
+		sourceColumn: [Año-Mes]
+
+	column 'Día de la semana'
+		dataType: string
+		summarizeBy: none
+		sourceColumn: [Día de la semana]
+
+	partition Calendario = calculated
+		mode: import
+		source = ```
+				VAR Inicio = DATE(2026, 1, 1)
+				VAR Fin = DATE(YEAR(TODAY()) + 1, 12, 31)
+				RETURN
+				    ADDCOLUMNS(
+				        CALENDAR(Inicio, Fin),
+				        "Fecha", [Date],
+				        "Año", YEAR([Date]),
+				        "Mes", MONTH([Date]),
+				        "Nombre del mes", FORMAT([Date], "mmmm"),
+				        "Año-Mes", FORMAT([Date], "yyyy-mm"),
+				        "Día de la semana", FORMAT([Date], "dddd")
+				    )
+				```

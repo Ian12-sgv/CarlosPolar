@@ -1,0 +1,56 @@
+table Clientes
+
+	column cliente_id
+		dataType: string
+		summarizeBy: none
+		sourceColumn: cliente_id
+		isHidden
+
+	column documento
+		dataType: string
+		summarizeBy: none
+		sourceColumn: documento
+
+	column razon_social
+		dataType: string
+		summarizeBy: none
+		sourceColumn: razon_social
+
+	column ruta_id
+		dataType: string
+		summarizeBy: none
+		sourceColumn: ruta_id
+		isHidden
+
+	column limite_credito
+		dataType: double
+		formatString: #,0.00
+		summarizeBy: none
+		sourceColumn: limite_credito
+
+	column moneda_credito
+		dataType: string
+		summarizeBy: none
+		sourceColumn: moneda_credito
+
+	column dias_credito
+		dataType: int64
+		formatString: 0
+		summarizeBy: none
+		sourceColumn: dias_credito
+
+	column activo
+		dataType: boolean
+		summarizeBy: none
+		sourceColumn: activo
+
+	partition Clientes = m
+		mode: import
+		source =
+				let
+				    Origen = PostgreSQL.Database(Servidor, BaseDatos),
+				    Vista = Origen{[Schema = "bi", Item = "v_dim_clientes"]}[Data],
+				    Columnas = Table.SelectColumns(Vista, {"cliente_id", "documento", "razon_social", "ruta_id", "limite_credito", "moneda_credito", "dias_credito", "activo"}),
+				    Tipos = Table.TransformColumnTypes(Columnas, {{"cliente_id", type text}, {"documento", type text}, {"razon_social", type text}, {"ruta_id", type text}, {"limite_credito", type number}, {"moneda_credito", type text}, {"dias_credito", Int64.Type}, {"activo", type logical}})
+				in
+				    Tipos

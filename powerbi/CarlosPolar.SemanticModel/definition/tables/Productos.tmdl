@@ -1,0 +1,44 @@
+table Productos
+
+	column producto_id
+		dataType: string
+		summarizeBy: none
+		sourceColumn: producto_id
+		isHidden
+
+	column sku
+		dataType: string
+		summarizeBy: none
+		sourceColumn: sku
+
+	column nombre
+		dataType: string
+		summarizeBy: none
+		sourceColumn: nombre
+
+	column unidad
+		dataType: string
+		summarizeBy: none
+		sourceColumn: unidad
+
+	column stock_minimo
+		dataType: double
+		formatString: #,0.###
+		summarizeBy: none
+		sourceColumn: stock_minimo
+
+	column activo
+		dataType: boolean
+		summarizeBy: none
+		sourceColumn: activo
+
+	partition Productos = m
+		mode: import
+		source =
+				let
+				    Origen = PostgreSQL.Database(Servidor, BaseDatos),
+				    Vista = Origen{[Schema = "bi", Item = "v_dim_productos"]}[Data],
+				    Columnas = Table.SelectColumns(Vista, {"producto_id", "sku", "nombre", "unidad", "stock_minimo", "activo"}),
+				    Tipos = Table.TransformColumnTypes(Columnas, {{"producto_id", type text}, {"sku", type text}, {"nombre", type text}, {"unidad", type text}, {"stock_minimo", type number}, {"activo", type logical}})
+				in
+				    Tipos

@@ -1,0 +1,1002 @@
+// Modelo transaccional del MVP.
+//
+// Reglas que este esquema asume (ver docs/modelo-datos.md):
+// - Los documentos financieros, de inventario y de auditoría nunca se borran.
+//   Las correcciones se hacen con cambios de estado y eventos compensatorios.
+// - El inventario se explica con `movimientos_inventario`; `existencias` es una
+//   caché que mantiene un trigger a partir del libro de movimientos.
+// - Las restricciones que Prisma no expresa (índices parciales, CHECK,
+//   triggers de inmutabilidad, vistas BI) están en la migración inicial.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ───────────────────────── Seguridad ─────────────────────────
+
+model Usuario {
+  id           String   @id @default(dbgenerated("uuid_v7()")) @db.Uuid
+  username     String   @unique
+  nombre       String
+  passwordHash String   @map("password_hash")
+  activo       Boolean  @default(true)
+  creadoEn     DateTime @default(now()) @map("creado_en") @db.Timestamptz(3)
+
+  roles        UsuarioRol[]
+  dispositivos Dispositivo[]
+  sesiones     Sesion[]
+  vendedor     Vendedor?
+
+  @@map("usuarios")
+}
+
+model Rol {
+  id       String       @id @default(dbgenerated("uuid_v7()")) @db.Uuid
+  codigo   String       @unique
+  nombre   String
+  permisos RolPermiso[]
+  usuarios UsuarioRol[]
+
+  @@map("roles")
+}
+
+/// Permisos por acción, p. ej. `pedido.aprobar`, `pago.validar`, `factura.anular`.
+model Permiso {
+  id          String       @id @default(dbgenerated("uuid_v7()")) @db.Uuid
+  codigo      String       @unique
+  descripcion String
+  roles       RolPermiso[]
+
+  @@map("permisos")
+}
+
+model RolPermiso {
+  rolId     String  @map("rol_id") @db.Uuid
+  permisoId String  @map("permiso_id") @db.Uuid
+  rol       Rol     @relation(fields: [rolId], references: [id])
+  permiso   Permiso @relation(fields: [permisoId], references: [id])
+
+  @@id([rolId, permisoId])
+  @@map("rol_permisos")
+}
+
+model UsuarioRol {
+  usuarioId String  @map("usuario_id") @db.Uuid
+  rolId     String  @map("rol_id") @db.Uuid
+  usuario   Usuario @relation(fields: [usuarioId], references: [id])
+  rol       Rol     @relation(fields: [rolId], references: [id])
+
+  @@id([usuarioId, rolId])
+  @@map("usuario_roles")
+}
+
+model Dispositivo {
+  id            String    @id @default(dbgenerated("uuid_v7()")) @db.Uuid
+  usuarioId     String    @map("usuario_id") @db.Uuid
+  identificador String
+  plataforma    String
+  nombre        String?
+  registradoEn  DateTime  @default(now()) @map("registrado_en") @db.Timestamptz(3)
+  revocadoEn    DateTime? @map("revocado_en") @db.Timestamptz(3)
+
+  usuario  Usuario  @relation(fields: [usuarioId], references: [id])
+  sesiones Sesion[]
+
+  @@unique([usuarioId, identificador])
+  @@map("dispositivos")
+}
+
+model Sesion {
+  id               String    @id @default(dbgenerated("uuid_v7()")) @db.Uuid
+  usuarioId        String    @map("usuario_id") @db.Uuid
+  dispositivoId    String?   @map("dispositivo_id") @db.Uuid
+  /// Hash SHA-256 del token de acceso (opaco, de vida corta). Se rota en cada refresco.
+  accessTokenHash  String    @unique @map("access_token_hash")
+  accessExpiraEn   DateTime  @map("access_expira_en") @db.Timestamptz(3)
+  refreshTokenHash String    @unique @map("refresh_token_hash")
+  creadaEn         DateTime  @default(now()) @map("creada_en") @db.Timestamptz(3)
+  /// Fin absoluto de la sesión: después de esta fecha hay que volver a iniciar sesión.
+  expiraEn         DateTime  @map("expira_en") @db.Timestamptz(3)
+  ultimoUsoEn      DateTime  @default(now()) @map("ultimo_uso_en") @db.Timestamptz(3)
+  revocadaEn       DateTime? @map("revocada_en") @db.Timestamptz(3)
+
+  usuario     Usuario      @relation(fields: [usuarioId], references: [id])
+  dispositivo Dispositivo? @relation(fields: [dispositivoId], references: [id])
+
+  @@index([usuarioId])
+  @@map("sesiones")
+}
+
+// ───────────────────────── Maestros comerciales ─────────────────────────
+
+enum Moneda {
+  USD
+  VES
+}
+
+enum TipoDocumentoIdentidad {
+  V
+  E
+  J
+  G
+  P
+}
+
+model Vendedor {
+  id        String  @id @default(dbgenerated("uuid_v7()")) @db.Uuid
+  usuarioId String  @unique @map("usuario_id") @db.Uuid
+  codigo    String  @unique
+  activo    Boolean @default(true)
+
+  usuario           Usuario                    @relation(fields: [usuarioId], references: [id])
+  clientesActuales  Cliente[]
+  historialClientes ClienteVendedorHistorial[]
+  pedidos           Pedido[]
+  facturas          Factura[]
+  pagosRecibidos    PagoRecibido[]
+  rutas             Ruta[]
+  visitasPlan       VisitaPlanificada[]
+  visitas           Visita[]
+
+  @@map("vendedores")
+}
+
+model Ruta {
+  id         String  @id @default(dbgenerated("uuid_v7()")) @db.Uuid
+  codigo     String  @unique
+  nombre     String
+  /// Preventista que atiende la ruta actualmente. Cada visita planificada
+  /// guarda el vendedor del día, así que cambiarlo no altera el histórico.
+  vendedorId String? @map("vendedor_id") @db.Uuid
+  activo     Boolean @default(true)
+
+  vendedor     Vendedor?           @relation(fields: [vendedorId], references: [id])
+  clientes     Cliente[]
+  pedidos      Pedido[]
+  facturas     Factura[]
+  planClientes RutaPlanCliente[]
+  visitasPlan  VisitaPlanificada[]
+  visitas      Visita[]
+
+  @@map("rutas")
+}
+
+model Cliente {
+  id            String                 @id @default(dbgenerated("uuid_v7()")) @db.Uuid
+  tipoDocumento TipoDocumentoIdentidad @map("tipo_documento")
+  nroDocumento  String                 @map("nro_documento")
+  razonSocial   String                 @map("razon_social")
+  direccion     String
+  telefono      String?
+  latitud       Decimal?               @db.Decimal(9, 6)
+  longitud      Decimal?               @db.Decimal(9, 6)
+  rutaId        String?                @map("ruta_id") @db.Uuid
+  vendedorId    String?                @map("vendedor_id") @db.Uuid
+  listaPrecioId String?                @map("lista_precio_id") @db.Uuid
+  /// Cupo de crédito en `monedaCredito`. Null = sin crédito (solo contado).
+  limiteCredito Decimal?               @map("limite_credito") @db.Decimal(18, 2)
+  monedaCredito Moneda                 @default(USD) @map("moneda_credito")
+  diasCredito   Int                    @default(0) @map("dias_credito")
+  activo        Boolean                @default(true)
+  creadoEn      DateTime               @default(now()) @map("creado_en") @db.Timestamptz(3)
+
+  ruta              Ruta?                      @relation(fields: [rutaId], references: [id])
+  vendedor          Vendedor?                  @relation(fields: [vendedorId], references: [id])
+  listaPrecio       ListaPrecio?               @relation(fields: [listaPrecioId], references: [id])
+  historialVendedor ClienteVendedorHistorial[]
+  pedidos           Pedido[]
+  facturas          Factura[]
+  pagos             PagoRecibido[]
+  planRutas         RutaPlanCliente[]
+  visitasPlan       VisitaPlanificada[]
+  visitas           Visita[]
+
+  @@unique([tipoDocumento, nroDocumento])
+  @@index([vendedorId])
+  @@index([rutaId])
+  @@map("clientes")
+}
+
+model ClienteVendedorHistorial {
+  id          String    @id @default(dbgenerated("uuid_v7()")) @db.Uuid
+  clienteId   String    @map("cliente_id") @db.Uuid
+  vendedorId  String    @map("vendedor_id") @db.Uuid
+  fechaDesde  DateTime  @map("fecha_desde") @db.Timestamptz(3)
+  /// Null = asignación vigente. Un índice parcial garantiza una sola vigente por cliente.
+  fechaHasta  DateTime? @map("fecha_hasta") @db.Timestamptz(3)
+  asignadoPor String    @map("asignado_por") @db.Uuid
+
+  cliente  Cliente  @relation(fields: [clienteId], references: [id])
+  vendedor Vendedor @relation(fields: [vendedorId], references: [id])
+
+  @@index([clienteId, fechaDesde])
+  @@map("cliente_vendedor_historial")
+}
+
+model Producto {
+  id          String  @id @default(dbgenerated("uuid_v7()")) @db.Uuid
+  sku         String  @unique
+  nombre      String
+  unidad      String
+  /// Porcentaje de IVA, p. ej. 16.00. Se copia a cada línea al emitir.
+  alicuotaIva Decimal @default(16) @map("alicuota_iva") @db.Decimal(5, 2)
+  stockMinimo Decimal @default(0) @map("stock_minimo") @db.Decimal(14, 3)
+  activo      Boolean @default(true)
+
+  precios      PrecioProducto[]
+  movimientos  MovimientoInventario[]
+  existencias  Existencia[]
+  reservas     ReservaInventario[]
+  pedidoItems  PedidoItem[]
+  facturaItems FacturaItem[]
+
+  @@map("productos")
+}
+
+model ListaPrecio {
+  id       String           @id @default(dbgenerated("uuid_v7()")) @db.Uuid
+  codigo   String           @unique
+  nombre   String
+  moneda   Moneda
+  activo   Boolean          @default(true)
+  precios  PrecioProducto[]
+  clientes Cliente[]
+  pedidos  Pedido[]
+
+  @@map("listas_precio")
+}
+
+/// Precio versionado. Una restricción EXCLUDE impide vigencias solapadas
+/// para el mismo producto en la misma lista.
+model PrecioProducto {
+  id            String    @id @default(dbgenerated("uuid_v7()")) @db.Uuid
+  listaPrecioId String    @map("lista_precio_id") @db.Uuid
+  productoId    String    @map("producto_id") @db.Uuid
+  precio        Decimal   @db.Decimal(18, 4)
+  vigenteDesde  DateTime  @map("vigente_desde") @db.Timestamptz(3)
+  /// Null = vigente sin fecha de fin.
+  vigenteHasta  DateTime? @map("vigente_hasta") @db.Timestamptz(3)
+  creadoPor     String    @map("creado_por") @db.Uuid
+  creadoEn      DateTime  @default(now()) @map("creado_en") @db.Timestamptz(3)
+
+  listaPrecio ListaPrecio @relation(fields: [listaPrecioId], references: [id])
+  producto    Producto    @relation(fields: [productoId], references: [id])
+
+  @@index([productoId, listaPrecioId, vigenteDesde])
+  @@map("precios_producto")
+}
+
+/// Tasa de cambio por fecha y fuente (p. ej. BCV). Cada documento guarda la
+/// tasa que usó; los reportes no la recalculan.
+model TasaCambio {
+  id            String   @id @default(dbgenerated("uuid_v7()")) @db.Uuid
+  fecha         DateTime @db.Date
+  monedaOrigen  Moneda   @map("moneda_origen")
+  monedaDestino Moneda   @map("moneda_destino")
+  tasa          Decimal  @db.Decimal(20, 8)
+  fuente        String
+  creadoPor     String   @map("creado_por") @db.Uuid
+  creadoEn      DateTime @default(now()) @map("creado_en") @db.Timestamptz(3)
+
+  @@unique([fecha, monedaOrigen, monedaDestino, fuente])
+  @@map("tasas_cambio")
+}
+
+/// Correlativos de numeración de documentos (pedidos, facturas, manifiestos).
+/// Se incrementan con UPDATE ... RETURNING dentro de la transacción del documento.
+model Correlativo {
+  codigo    String @id
+  prefijo   String
+  siguiente BigInt @default(1)
+
+  @@map("correlativos")
+}
+
+// ───────────────────────── Inventario ─────────────────────────
+
+enum TipoUbicacion {
+  ALMACEN
+  VEHICULO
+}
+
+model Vehiculo {
+  id          String  @id @default(dbgenerated("uuid_v7()")) @db.Uuid
+  placa       String  @unique
+  descripcion String?
+  activo      Boolean @default(true)
+
+  ubicacion   Ubicacion?
+  manifiestos Manifiesto[]
+
+  @@map("vehiculos")
+}
+
+/// Lugar de custodia del inventario: un almacén o un vehículo.
+model Ubicacion {
+  id         String        @id @default(dbgenerated("uuid_v7()")) @db.Uuid
+  codigo     String        @unique
+  nombre     String
+  tipo       TipoUbicacion
+  vehiculoId String?       @unique @map("vehiculo_id") @db.Uuid
+  activo     Boolean       @default(true)
+
+  vehiculo          Vehiculo?              @relation(fields: [vehiculoId], references: [id])
+  movimientos       MovimientoInventario[]
+  existencias       Existencia[]
+  reservas          ReservaInventario[]
+  manifiestosOrigen Manifiesto[]
+
+  @@map("ubicaciones")
+}
+
+enum TipoMovimiento {
+  INGRESO
+  CARGA_SALIDA
+  CARGA_ENTRADA
+  ENTREGA
+  RETORNO_SALIDA
+  RETORNO_ENTRADA
+  DEVOLUCION
+  AJUSTE
+}
+
+/// Libro inmutable de movimientos físicos. Una carga genera dos filas
+/// (salida del almacén, entrada al vehículo) con el mismo `grupoId`.
+/// Las reservas no son movimientos físicos: viven en `reservas_inventario`.
+model MovimientoInventario {
+  id                  String         @id @default(dbgenerated("uuid_v7()")) @db.Uuid
+  grupoId             String         @map("grupo_id") @db.Uuid
+  productoId          String         @map("producto_id") @db.Uuid
+  ubicacionId         String         @map("ubicacion_id") @db.Uuid
+  tipo                TipoMovimiento
+  cantidadEntrada     Decimal        @default(0) @map("cantidad_entrada") @db.Decimal(14, 3)
+  cantidadSalida      Decimal        @default(0) @map("cantidad_salida") @db.Decimal(14, 3)
+  documentoOrigenTipo String         @map("documento_origen_tipo")
+  documentoOrigenId   String         @map("documento_origen_id") @db.Uuid
+  fechaHora           DateTime       @default(now()) @map("fecha_hora") @db.Timestamptz(3)
+  usuarioId           String         @map("usuario_id") @db.Uuid
+  motivo              String?
+
+  producto  Producto  @relation(fields: [productoId], references: [id])
+  ubicacion Ubicacion @relation(fields: [ubicacionId], references: [id])
+
+  @@index([productoId, ubicacionId, fechaHora])
+  @@index([documentoOrigenTipo, documentoOrigenId])
+  @@index([grupoId])
+  @@map("movimientos_inventario")
+}
+
+/// Caché de saldos para consultas rápidas. `cantidad_fisica` la mantiene un
+/// trigger sobre movimientos; `cantidad_reservada`, un trigger sobre reservas.
+/// Un constraint trigger diferido exige reservada <= física al confirmar.
+model Existencia {
+  productoId        String   @map("producto_id") @db.Uuid
+  ubicacionId       String   @map("ubicacion_id") @db.Uuid
+  cantidadFisica    Decimal  @default(0) @map("cantidad_fisica") @db.Decimal(14, 3)
+  cantidadReservada Decimal  @default(0) @map("cantidad_reservada") @db.Decimal(14, 3)
+  actualizadoEn     DateTime @default(now()) @map("actualizado_en") @db.Timestamptz(3)
+
+  producto  Producto  @relation(fields: [productoId], references: [id])
+  ubicacion Ubicacion @relation(fields: [ubicacionId], references: [id])
+
+  @@id([productoId, ubicacionId])
+  @@map("existencias")
+}
+
+enum EstadoReserva {
+  ACTIVA
+  CONSUMIDA
+  LIBERADA
+  VENCIDA
+}
+
+/// Reserva de inventario creada al aprobar un pedido. Al facturar se ajusta a
+/// la cantidad facturada, se liga a la línea de factura y deja de vencer; se
+/// consume al cargar el camión. Si la factura vuelve sin entregarse, se crea
+/// una reserva nueva para la misma línea. Índices parciales garantizan una sola
+/// reserva activa por línea de pedido y por línea de factura.
+model ReservaInventario {
+  id            String        @id @default(dbgenerated("uuid_v7()")) @db.Uuid
+  productoId    String        @map("producto_id") @db.Uuid
+  ubicacionId   String        @map("ubicacion_id") @db.Uuid
+  pedidoItemId  String        @map("pedido_item_id") @db.Uuid
+  facturaItemId String?       @map("factura_item_id") @db.Uuid
+  cantidad      Decimal       @db.Decimal(14, 3)
+  estado        EstadoReserva @default(ACTIVA)
+  /// Null cuando ya está ligada a una factura.
+  venceEn       DateTime?     @map("vence_en") @db.Timestamptz(3)
+  creadaEn      DateTime      @default(now()) @map("creada_en") @db.Timestamptz(3)
+  cerradaEn     DateTime?     @map("cerrada_en") @db.Timestamptz(3)
+
+  producto    Producto     @relation(fields: [productoId], references: [id])
+  ubicacion   Ubicacion    @relation(fields: [ubicacionId], references: [id])
+  pedidoItem  PedidoItem   @relation(fields: [pedidoItemId], references: [id])
+  facturaItem FacturaItem? @relation(fields: [facturaItemId], references: [id])
+
+  @@index([estado, venceEn])
+  @@index([productoId, ubicacionId, estado])
+  @@index([facturaItemId])
+  @@map("reservas_inventario")
+}
+
+// ───────────────────────── Pedidos ─────────────────────────
+
+enum EstadoPedido {
+  EMITIDO
+  APROBADO
+  RECHAZADO
+  CANCELADO
+  FACTURADO
+}
+
+model Pedido {
+  id                    String       @id @default(dbgenerated("uuid_v7()")) @db.Uuid
+  numero                String       @unique
+  clienteId             String       @map("cliente_id") @db.Uuid
+  vendedorResponsableId String       @map("vendedor_responsable_id") @db.Uuid
+  rutaId                String?      @map("ruta_id") @db.Uuid
+  listaPrecioId         String       @map("lista_precio_id") @db.Uuid
+  moneda                Moneda
+  estado                EstadoPedido @default(EMITIDO)
+  subtotal              Decimal      @db.Decimal(18, 2)
+  impuesto              Decimal      @db.Decimal(18, 2)
+  total                 Decimal      @db.Decimal(18, 2)
+  observaciones         String?
+  /// Motivo del último rechazo o cancelación.
+  motivoEstado          String?      @map("motivo_estado")
+  /// Visita en la que se tomó el pedido (null si se cargó desde el backoffice).
+  visitaId              String?      @map("visita_id") @db.Uuid
+  fechaEmision          DateTime     @map("fecha_emision") @db.Timestamptz(3)
+  latitud               Decimal?     @db.Decimal(9, 6)
+  longitud              Decimal?     @db.Decimal(9, 6)
+  creadoPor             String       @map("creado_por") @db.Uuid
+  creadoEn              DateTime     @default(now()) @map("creado_en") @db.Timestamptz(3)
+  /// Versión para control optimista de concurrencia.
+  version               Int          @default(1)
+
+  cliente             Cliente      @relation(fields: [clienteId], references: [id])
+  vendedorResponsable Vendedor     @relation(fields: [vendedorResponsableId], references: [id])
+  ruta                Ruta?        @relation(fields: [rutaId], references: [id])
+  listaPrecio         ListaPrecio  @relation(fields: [listaPrecioId], references: [id])
+  visita              Visita?      @relation(fields: [visitaId], references: [id])
+  items               PedidoItem[]
+  facturas            Factura[]
+
+  @@index([clienteId, fechaEmision])
+  @@index([estado])
+  @@map("pedidos")
+}
+
+model PedidoItem {
+  id             String  @id @default(dbgenerated("uuid_v7()")) @db.Uuid
+  pedidoId       String  @map("pedido_id") @db.Uuid
+  linea          Int
+  productoId     String  @map("producto_id") @db.Uuid
+  cantidad       Decimal @db.Decimal(14, 3)
+  /// Precio que vio u ofertó el preventista (fotografía).
+  precioOfertado Decimal @map("precio_ofertado") @db.Decimal(18, 4)
+  descuentoPct   Decimal @default(0) @map("descuento_pct") @db.Decimal(5, 2)
+  alicuotaIva    Decimal @map("alicuota_iva") @db.Decimal(5, 2)
+
+  pedido       Pedido              @relation(fields: [pedidoId], references: [id])
+  producto     Producto            @relation(fields: [productoId], references: [id])
+  facturaItems FacturaItem[]
+  reservas     ReservaInventario[]
+
+  @@unique([pedidoId, linea])
+  @@map("pedido_items")
+}
+
+// ───────────────────────── Facturación ─────────────────────────
+
+enum EstadoFactura {
+  EMITIDA
+  DESPACHADA
+  ENTREGADA
+  ANULADA
+}
+
+/// Factura con fotografía de cliente, vendedor, ruta, moneda y tasa al emitir.
+/// El saldo pendiente no se guarda: se calcula en `bi.v_saldo_facturas`.
+model Factura {
+  id                    String                 @id @default(dbgenerated("uuid_v7()")) @db.Uuid
+  numero                String                 @unique
+  /// Número de control fiscal asignado por la imprenta digital o máquina fiscal.
+  numeroControl         String?                @unique @map("numero_control")
+  pedidoId              String?                @map("pedido_id") @db.Uuid
+  clienteId             String                 @map("cliente_id") @db.Uuid
+  clienteTipoDocumento  TipoDocumentoIdentidad @map("cliente_tipo_documento")
+  clienteNroDocumento   String                 @map("cliente_nro_documento")
+  clienteRazonSocial    String                 @map("cliente_razon_social")
+  clienteDireccion      String                 @map("cliente_direccion")
+  vendedorResponsableId String                 @map("vendedor_responsable_id") @db.Uuid
+  rutaId                String?                @map("ruta_id") @db.Uuid
+  moneda                Moneda
+  /// Tasa VES por USD usada al emitir.
+  tasaCambio            Decimal                @map("tasa_cambio") @db.Decimal(20, 8)
+  subtotal              Decimal                @db.Decimal(18, 2)
+  descuento             Decimal                @default(0) @db.Decimal(18, 2)
+  impuesto              Decimal                @db.Decimal(18, 2)
+  total                 Decimal                @db.Decimal(18, 2)
+  estado                EstadoFactura          @default(EMITIDA)
+  fechaEmision          DateTime               @map("fecha_emision") @db.Timestamptz(3)
+  fechaVencimiento      DateTime               @map("fecha_vencimiento") @db.Date
+  emitidaPor            String                 @map("emitida_por") @db.Uuid
+  motivoAnulacion       String?                @map("motivo_anulacion")
+  version               Int                    @default(1)
+
+  pedido              Pedido?             @relation(fields: [pedidoId], references: [id])
+  cliente             Cliente             @relation(fields: [clienteId], references: [id])
+  vendedorResponsable Vendedor            @relation(fields: [vendedorResponsableId], references: [id])
+  ruta                Ruta?               @relation(fields: [rutaId], references: [id])
+  items               FacturaItem[]
+  manifiestos         ManifiestoFactura[]
+  entregas            Entrega[]
+  aplicaciones        PagoAplicacion[]
+
+  @@index([clienteId, fechaEmision])
+  @@index([estado])
+  @@index([fechaVencimiento])
+  @@map("facturas")
+}
+
+model FacturaItem {
+  id             String  @id @default(dbgenerated("uuid_v7()")) @db.Uuid
+  facturaId      String  @map("factura_id") @db.Uuid
+  linea          Int
+  /// Línea de pedido que origina esta línea; permite medir pedido vs. factura.
+  pedidoItemId   String? @map("pedido_item_id") @db.Uuid
+  productoId     String  @map("producto_id") @db.Uuid
+  cantidad       Decimal @db.Decimal(14, 3)
+  precioUnitario Decimal @map("precio_unitario") @db.Decimal(18, 4)
+  descuentoPct   Decimal @default(0) @map("descuento_pct") @db.Decimal(5, 2)
+  alicuotaIva    Decimal @map("alicuota_iva") @db.Decimal(5, 2)
+  subtotal       Decimal @db.Decimal(18, 2)
+  impuesto       Decimal @db.Decimal(18, 2)
+  total          Decimal @db.Decimal(18, 2)
+
+  factura         Factura            @relation(fields: [facturaId], references: [id])
+  pedidoItem      PedidoItem?        @relation(fields: [pedidoItemId], references: [id])
+  producto        Producto           @relation(fields: [productoId], references: [id])
+  reservas        ReservaInventario[]
+  manifiestoItems ManifiestoItem[]
+  entregaItems    EntregaItem[]
+
+  @@unique([facturaId, linea])
+  @@map("factura_items")
+}
+
+// ───────────────────────── Despacho ─────────────────────────
+
+enum EstadoManifiesto {
+  BORRADOR
+  CONFIRMADO
+  EN_RUTA
+  CERRADO
+  ANULADO
+}
+
+/// Entidad de custodia: quién cargó qué, en qué vehículo y bajo qué chofer.
+model Manifiesto {
+  id                String           @id @default(dbgenerated("uuid_v7()")) @db.Uuid
+  numero            String           @unique
+  vehiculoId        String           @map("vehiculo_id") @db.Uuid
+  ubicacionOrigenId String           @map("ubicacion_origen_id") @db.Uuid
+  choferId          String           @map("chofer_id") @db.Uuid
+  despachadorId     String           @map("despachador_id") @db.Uuid
+  estado            EstadoManifiesto @default(BORRADOR)
+  creadoEn          DateTime         @default(now()) @map("creado_en") @db.Timestamptz(3)
+  confirmadoEn      DateTime?        @map("confirmado_en") @db.Timestamptz(3)
+  salidaEn          DateTime?        @map("salida_en") @db.Timestamptz(3)
+  cerradoEn         DateTime?        @map("cerrado_en") @db.Timestamptz(3)
+  version           Int              @default(1)
+
+  vehiculo        Vehiculo            @relation(fields: [vehiculoId], references: [id])
+  ubicacionOrigen Ubicacion           @relation(fields: [ubicacionOrigenId], references: [id])
+  facturas        ManifiestoFactura[]
+  items           ManifiestoItem[]
+  entregas        Entrega[]
+
+  @@index([estado])
+  @@index([choferId, estado])
+  @@map("manifiestos")
+}
+
+/// `activa` se pone en false si la factura sale del manifiesto o este se anula.
+/// Un índice parcial impide que una factura esté en dos manifiestos activos.
+model ManifiestoFactura {
+  id           String  @id @default(dbgenerated("uuid_v7()")) @db.Uuid
+  manifiestoId String  @map("manifiesto_id") @db.Uuid
+  facturaId    String  @map("factura_id") @db.Uuid
+  activa       Boolean @default(true)
+  ordenVisita  Int?    @map("orden_visita")
+
+  manifiesto Manifiesto @relation(fields: [manifiestoId], references: [id])
+  factura    Factura    @relation(fields: [facturaId], references: [id])
+
+  @@unique([manifiestoId, facturaId])
+  @@map("manifiesto_facturas")
+}
+
+model ManifiestoItem {
+  id              String  @id @default(dbgenerated("uuid_v7()")) @db.Uuid
+  manifiestoId    String  @map("manifiesto_id") @db.Uuid
+  facturaItemId   String  @map("factura_item_id") @db.Uuid
+  cantidadCargada Decimal @map("cantidad_cargada") @db.Decimal(14, 3)
+
+  manifiesto  Manifiesto  @relation(fields: [manifiestoId], references: [id])
+  facturaItem FacturaItem @relation(fields: [facturaItemId], references: [id])
+
+  @@unique([manifiestoId, facturaItemId])
+  @@map("manifiesto_items")
+}
+
+// ───────────────────────── Entregas ─────────────────────────
+
+enum EstadoEntrega {
+  CONFIRMADA
+  RECHAZADA
+  ANULADA
+}
+
+enum TipoArchivo {
+  FIRMA
+  EVIDENCIA_PAGO
+  FOTO
+  PDF
+}
+
+/// Archivo guardado en el sistema de archivos local. El hash permite detectar
+/// alteraciones y deduplicar reenvíos desde el móvil.
+model Archivo {
+  id           String      @id @default(dbgenerated("uuid_v7()")) @db.Uuid
+  tipo         TipoArchivo
+  rutaRelativa String      @unique @map("ruta_relativa")
+  mime         String
+  tamanoBytes  Int         @map("tamano_bytes")
+  sha256       String
+  subidoPor    String      @map("subido_por") @db.Uuid
+  creadoEn     DateTime    @default(now()) @map("creado_en") @db.Timestamptz(3)
+
+  firmasEntrega  Entrega[]
+  evidenciasPago PagoRecibido[]
+
+  @@index([sha256])
+  @@map("archivos")
+}
+
+/// Un índice parcial impide dos entregas CONFIRMADAS para la misma factura.
+/// En el MVP la entrega es total o rechazo total; `entrega_items` ya guarda
+/// cantidades por línea para soportar entregas parciales en P1.
+model Entrega {
+  id                String        @id @default(dbgenerated("uuid_v7()")) @db.Uuid
+  facturaId         String        @map("factura_id") @db.Uuid
+  manifiestoId      String        @map("manifiesto_id") @db.Uuid
+  choferId          String        @map("chofer_id") @db.Uuid
+  estado            EstadoEntrega
+  fechaHora         DateTime      @map("fecha_hora") @db.Timestamptz(3)
+  latitud           Decimal?      @db.Decimal(9, 6)
+  longitud          Decimal?      @db.Decimal(9, 6)
+  precisionMetros   Decimal?      @map("precision_metros") @db.Decimal(8, 2)
+  firmaArchivoId    String?       @map("firma_archivo_id") @db.Uuid
+  receptorNombre    String?       @map("receptor_nombre")
+  receptorDocumento String?       @map("receptor_documento")
+  motivoRechazo     String?       @map("motivo_rechazo")
+  observaciones     String?
+  registradaEn      DateTime      @default(now()) @map("registrada_en") @db.Timestamptz(3)
+
+  factura      Factura       @relation(fields: [facturaId], references: [id])
+  manifiesto   Manifiesto    @relation(fields: [manifiestoId], references: [id])
+  firmaArchivo Archivo?      @relation(fields: [firmaArchivoId], references: [id])
+  items        EntregaItem[]
+
+  @@index([facturaId])
+  @@index([manifiestoId])
+  @@map("entregas")
+}
+
+model EntregaItem {
+  id                String  @id @default(dbgenerated("uuid_v7()")) @db.Uuid
+  entregaId         String  @map("entrega_id") @db.Uuid
+  facturaItemId     String  @map("factura_item_id") @db.Uuid
+  cantidadEntregada Decimal @map("cantidad_entregada") @db.Decimal(14, 3)
+  cantidadRechazada Decimal @default(0) @map("cantidad_rechazada") @db.Decimal(14, 3)
+  motivoRechazo     String? @map("motivo_rechazo")
+
+  entrega     Entrega     @relation(fields: [entregaId], references: [id])
+  facturaItem FacturaItem @relation(fields: [facturaItemId], references: [id])
+
+  @@unique([entregaId, facturaItemId])
+  @@map("entrega_items")
+}
+
+// ───────────────────────── Cobranzas ─────────────────────────
+
+enum MetodoPago {
+  EFECTIVO
+  TRANSFERENCIA
+  PAGO_MOVIL
+  PUNTO_VENTA
+  ZELLE
+}
+
+enum EstadoPago {
+  REGISTRADO
+  VALIDADO
+  RECHAZADO
+  ANULADO
+}
+
+/// Registrar un pago no reduce la deuda oficial: solo lo hacen las
+/// aplicaciones de pagos VALIDADOS. Un índice parcial impide reutilizar la
+/// misma referencia para el mismo método y origen (salvo pagos anulados).
+model PagoRecibido {
+  id                    String     @id @default(dbgenerated("uuid_v7()")) @db.Uuid
+  clienteId             String     @map("cliente_id") @db.Uuid
+  vendedorReceptorId    String?    @map("vendedor_receptor_id") @db.Uuid
+  metodoPago            MetodoPago @map("metodo_pago")
+  /// Banco o entidad emisora. Para efectivo se usa 'CAJA'.
+  entidadOrigen         String     @map("entidad_origen")
+  referenciaNormalizada String?    @map("referencia_normalizada")
+  referenciaOriginal    String?    @map("referencia_original")
+  moneda                Moneda
+  montoTotal            Decimal    @map("monto_total") @db.Decimal(18, 2)
+  /// Tasa VES por USD vigente al registrar el pago.
+  tasaCambio            Decimal    @map("tasa_cambio") @db.Decimal(20, 8)
+  fechaEmision          DateTime   @map("fecha_emision") @db.Date
+  fechaRegistro         DateTime   @default(now()) @map("fecha_registro") @db.Timestamptz(3)
+  estado                EstadoPago @default(REGISTRADO)
+  evidenciaArchivoId    String?    @map("evidencia_archivo_id") @db.Uuid
+  latitud               Decimal?   @db.Decimal(9, 6)
+  longitud              Decimal?   @db.Decimal(9, 6)
+  creadoPor             String     @map("creado_por") @db.Uuid
+  validadoPor           String?    @map("validado_por") @db.Uuid
+  validadoEn            DateTime?  @map("validado_en") @db.Timestamptz(3)
+  motivoRechazo         String?    @map("motivo_rechazo")
+  /// Visita en la que se recibió el pago, si fue en campo.
+  visitaId              String?    @map("visita_id") @db.Uuid
+  version               Int        @default(1)
+
+  cliente          Cliente          @relation(fields: [clienteId], references: [id])
+  vendedorReceptor Vendedor?        @relation(fields: [vendedorReceptorId], references: [id])
+  evidenciaArchivo Archivo?         @relation(fields: [evidenciaArchivoId], references: [id])
+  visita           Visita?          @relation(fields: [visitaId], references: [id])
+  aplicaciones     PagoAplicacion[]
+
+  @@index([clienteId, fechaRegistro])
+  @@index([estado])
+  @@map("pagos_recibidos")
+}
+
+/// Imputación de un pago a una factura. `montoAplicado` está en la moneda de
+/// la factura; `montoMonedaPago` en la del pago. Un trigger impide aplicar más
+/// que el monto del pago o que el saldo de la factura.
+model PagoAplicacion {
+  id              String   @id @default(dbgenerated("uuid_v7()")) @db.Uuid
+  pagoId          String   @map("pago_id") @db.Uuid
+  facturaId       String   @map("factura_id") @db.Uuid
+  montoAplicado   Decimal  @map("monto_aplicado") @db.Decimal(18, 2)
+  montoMonedaPago Decimal  @map("monto_moneda_pago") @db.Decimal(18, 2)
+  tasaCambio      Decimal  @map("tasa_cambio") @db.Decimal(20, 8)
+  fechaAplicacion DateTime @default(now()) @map("fecha_aplicacion") @db.Timestamptz(3)
+  creadoPor       String   @map("creado_por") @db.Uuid
+
+  pago    PagoRecibido @relation(fields: [pagoId], references: [id])
+  factura Factura      @relation(fields: [facturaId], references: [id])
+
+  @@unique([pagoId, facturaId])
+  @@index([facturaId])
+  @@map("pago_aplicaciones")
+}
+
+// ───────────────────────── Trazabilidad ─────────────────────────
+
+enum OrigenEvento {
+  WEB
+  APP_PREVENTISTA
+  APP_CHOFER
+  API
+  SISTEMA
+}
+
+/// Evento de negocio inmutable. Los tipos válidos y las transiciones que los
+/// generan están definidos en `@cp/domain` (ciclos.ts).
+model EventoNegocio {
+  id                    String       @id @default(dbgenerated("uuid_v7()")) @db.Uuid
+  tipoEntidad           String       @map("tipo_entidad")
+  idEntidad             String       @map("id_entidad") @db.Uuid
+  tipoEvento            String       @map("tipo_evento")
+  estadoAnterior        String?      @map("estado_anterior")
+  estadoNuevo           String?      @map("estado_nuevo")
+  fechaHoraUtc          DateTime     @default(now()) @map("fecha_hora_utc") @db.Timestamptz(3)
+  /// Momento en que ocurrió en el dispositivo (puede diferir si hubo modo offline).
+  fechaHoraDispositivo  DateTime?    @map("fecha_hora_dispositivo") @db.Timestamptz(3)
+  zonaHorariaOperativa  String       @default("America/Caracas") @map("zona_horaria_operativa")
+  usuarioId             String       @map("usuario_id") @db.Uuid
+  rolCodigo             String?      @map("rol_codigo")
+  dispositivoId         String?      @map("dispositivo_id") @db.Uuid
+  vendedorResponsableId String?      @map("vendedor_responsable_id") @db.Uuid
+  clienteId             String?      @map("cliente_id") @db.Uuid
+  rutaId                String?      @map("ruta_id") @db.Uuid
+  vehiculoId            String?      @map("vehiculo_id") @db.Uuid
+  latitud               Decimal?     @db.Decimal(9, 6)
+  longitud              Decimal?     @db.Decimal(9, 6)
+  origen                OrigenEvento
+  datos                 Json?
+
+  @@index([tipoEntidad, idEntidad, fechaHoraUtc])
+  @@index([tipoEvento, fechaHoraUtc])
+  @@map("eventos_negocio")
+}
+
+/// Bitácora inmutable de cambios a datos maestros y acciones sensibles
+/// (precios, cupos, permisos, asignaciones) con el antes y el después.
+model Auditoria {
+  id            String       @id @default(dbgenerated("uuid_v7()")) @db.Uuid
+  fechaHoraUtc  DateTime     @default(now()) @map("fecha_hora_utc") @db.Timestamptz(3)
+  usuarioId     String?      @map("usuario_id") @db.Uuid
+  dispositivoId String?      @map("dispositivo_id") @db.Uuid
+  origen        OrigenEvento
+  ip            String?
+  accion        String
+  tabla         String
+  registroId    String?      @map("registro_id")
+  datosAntes    Json?        @map("datos_antes")
+  datosDespues  Json?        @map("datos_despues")
+
+  @@index([tabla, registroId])
+  @@index([usuarioId, fechaHoraUtc])
+  @@map("auditoria")
+}
+
+/// Registro de solicitudes con `Idempotency-Key`. Si el móvil reenvía la misma
+/// clave, la API devuelve la respuesta guardada en lugar de repetir la operación.
+model SolicitudIdempotente {
+  usuarioId       String   @map("usuario_id") @db.Uuid
+  clave           String
+  metodoHttp      String   @map("metodo_http")
+  ruta            String
+  hashSolicitud   String   @map("hash_solicitud")
+  /// Null mientras la primera solicitud sigue en proceso.
+  estadoRespuesta Int?     @map("estado_respuesta")
+  cuerpoRespuesta Json?    @map("cuerpo_respuesta")
+  creadaEn        DateTime @default(now()) @map("creada_en") @db.Timestamptz(3)
+
+  @@id([usuarioId, clave])
+  @@index([creadaEn])
+  @@map("solicitudes_idempotentes")
+}
+
+// ───────────────────────── Rutas y visitas ─────────────────────────
+
+/// Plantilla semanal: qué clientes se visitan cada día de la semana y en qué orden.
+/// Las visitas del día se generan a partir de esta plantilla.
+model RutaPlanCliente {
+  id           String    @id @default(dbgenerated("uuid_v7()")) @db.Uuid
+  rutaId       String    @map("ruta_id") @db.Uuid
+  clienteId    String    @map("cliente_id") @db.Uuid
+  /// 1 = lunes … 7 = domingo (ISO 8601).
+  diaSemana    Int       @map("dia_semana")
+  orden        Int
+  vigenteDesde DateTime  @map("vigente_desde") @db.Date
+  /// Null = vigente. Un índice parcial impide duplicar cliente y día vigentes en la misma ruta.
+  vigenteHasta DateTime? @map("vigente_hasta") @db.Date
+  creadoPor    String    @map("creado_por") @db.Uuid
+
+  ruta    Ruta    @relation(fields: [rutaId], references: [id])
+  cliente Cliente @relation(fields: [clienteId], references: [id])
+
+  @@index([rutaId, diaSemana])
+  @@map("ruta_plan_clientes")
+}
+
+enum OrigenVisitaPlan {
+  PLANTILLA
+  MANUAL
+}
+
+enum EstadoVisitaPlan {
+  PROGRAMADA
+  CANCELADA
+}
+
+/// Visita que el preventista debe hacer en una fecha. Guarda el vendedor del
+/// día para medir cumplimiento aunque la ruta cambie de responsable después.
+model VisitaPlanificada {
+  id                String           @id @default(dbgenerated("uuid_v7()")) @db.Uuid
+  fecha             DateTime         @db.Date
+  rutaId            String?          @map("ruta_id") @db.Uuid
+  vendedorId        String           @map("vendedor_id") @db.Uuid
+  clienteId         String           @map("cliente_id") @db.Uuid
+  orden             Int
+  origen            OrigenVisitaPlan
+  estado            EstadoVisitaPlan @default(PROGRAMADA)
+  motivoCancelacion String?          @map("motivo_cancelacion")
+  creadaEn          DateTime         @default(now()) @map("creada_en") @db.Timestamptz(3)
+
+  ruta     Ruta?    @relation(fields: [rutaId], references: [id])
+  vendedor Vendedor @relation(fields: [vendedorId], references: [id])
+  cliente  Cliente  @relation(fields: [clienteId], references: [id])
+  visitas  Visita[]
+
+  @@unique([fecha, vendedorId, clienteId])
+  @@index([vendedorId, fecha])
+  @@map("visitas_planificadas")
+}
+
+enum ResultadoVisita {
+  PEDIDO
+  COBRO
+  PEDIDO_Y_COBRO
+  SIN_PEDIDO
+  CLIENTE_CERRADO
+  NO_ATENDIDO
+}
+
+/// Visita realizada en campo, con GPS de llegada. `visitaPlanificadaId` es null
+/// para visitas fuera de plan. El id lo genera el móvil para reintentos idempotentes.
+model Visita {
+  id                  String           @id @default(dbgenerated("uuid_v7()")) @db.Uuid
+  visitaPlanificadaId String?          @map("visita_planificada_id") @db.Uuid
+  vendedorId          String           @map("vendedor_id") @db.Uuid
+  clienteId           String           @map("cliente_id") @db.Uuid
+  rutaId              String?          @map("ruta_id") @db.Uuid
+  inicioEn            DateTime         @map("inicio_en") @db.Timestamptz(3)
+  finEn               DateTime?        @map("fin_en") @db.Timestamptz(3)
+  latitud             Decimal?         @db.Decimal(9, 6)
+  longitud            Decimal?         @db.Decimal(9, 6)
+  precisionMetros     Decimal?         @map("precision_metros") @db.Decimal(8, 2)
+  /// Null mientras la visita está abierta.
+  resultado           ResultadoVisita?
+  motivoSinVenta      String?          @map("motivo_sin_venta")
+  observaciones       String?
+  registradaEn        DateTime         @default(now()) @map("registrada_en") @db.Timestamptz(3)
+
+  visitaPlanificada VisitaPlanificada? @relation(fields: [visitaPlanificadaId], references: [id])
+  vendedor          Vendedor           @relation(fields: [vendedorId], references: [id])
+  cliente           Cliente            @relation(fields: [clienteId], references: [id])
+  ruta              Ruta?              @relation(fields: [rutaId], references: [id])
+  pedidos           Pedido[]
+  pagos             PagoRecibido[]
+
+  @@index([vendedorId, inicioEn])
+  @@index([clienteId, inicioEn])
+  @@map("visitas")
+}
+
+// ───────────────────────── Sincronización móvil ─────────────────────────
+
+enum ResultadoSincronizacion {
+  ACEPTADO
+  DUPLICADO
+  RECHAZADO
+  CONFLICTO
+  ERROR
+}
+
+/// Bitácora inmutable de cada operación que envía una app móvil: permite medir
+/// reintentos, duplicados y conflictos por dispositivo, usuario y operación.
+model SincronizacionRegistro {
+  id                   String                  @id @default(dbgenerated("uuid_v7()")) @db.Uuid
+  usuarioId            String                  @map("usuario_id") @db.Uuid
+  dispositivoId        String?                 @map("dispositivo_id") @db.Uuid
+  origen               OrigenEvento
+  metodoHttp           String                  @map("metodo_http")
+  ruta                 String
+  claveIdempotencia    String?                 @map("clave_idempotencia")
+  fechaHoraDispositivo DateTime?               @map("fecha_hora_dispositivo") @db.Timestamptz(3)
+  recibidoEn           DateTime                @default(now()) @map("recibido_en") @db.Timestamptz(3)
+  resultado            ResultadoSincronizacion
+  estadoHttp           Int                     @map("estado_http")
+  codigoMotivo         String?                 @map("codigo_motivo")
+  duracionMs           Int                     @map("duracion_ms")
+
+  @@index([dispositivoId, recibidoEn])
+  @@index([resultado, recibidoEn])
+  @@map("sincronizacion_registros")
+}

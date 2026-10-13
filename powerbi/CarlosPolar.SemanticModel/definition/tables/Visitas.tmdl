@@ -1,0 +1,58 @@
+table Visitas
+
+	/// Visitas planificadas que se realizaron.
+	measure '% Cumplimiento de visitas' = DIVIDE(SUM(Visitas[planificadas_visitadas]), SUM(Visitas[planificadas]))
+		formatString: 0.0%
+		displayFolder: Visitas
+
+	/// Visitas que terminaron en pedido o cobro.
+	measure '% Visitas efectivas' = DIVIDE(SUM(Visitas[efectivas]), SUM(Visitas[planificadas_visitadas]) + SUM(Visitas[fuera_de_plan]))
+		formatString: 0.0%
+		displayFolder: Visitas
+
+	column fecha
+		dataType: dateTime
+		formatString: Short Date
+		summarizeBy: none
+		sourceColumn: fecha
+
+	column vendedor_id
+		dataType: string
+		summarizeBy: none
+		sourceColumn: vendedor_id
+		isHidden
+
+	column planificadas
+		dataType: int64
+		formatString: 0
+		summarizeBy: none
+		sourceColumn: planificadas
+
+	column planificadas_visitadas
+		dataType: int64
+		formatString: 0
+		summarizeBy: none
+		sourceColumn: planificadas_visitadas
+
+	column fuera_de_plan
+		dataType: int64
+		formatString: 0
+		summarizeBy: none
+		sourceColumn: fuera_de_plan
+
+	column efectivas
+		dataType: int64
+		formatString: 0
+		summarizeBy: none
+		sourceColumn: efectivas
+
+	partition Visitas = m
+		mode: import
+		source =
+				let
+				    Origen = PostgreSQL.Database(Servidor, BaseDatos),
+				    Vista = Origen{[Schema = "bi", Item = "v_cumplimiento_visitas"]}[Data],
+				    Columnas = Table.SelectColumns(Vista, {"fecha", "vendedor_id", "planificadas", "planificadas_visitadas", "fuera_de_plan", "efectivas"}),
+				    Tipos = Table.TransformColumnTypes(Columnas, {{"fecha", type date}, {"vendedor_id", type text}, {"planificadas", Int64.Type}, {"planificadas_visitadas", Int64.Type}, {"fuera_de_plan", Int64.Type}, {"efectivas", Int64.Type}})
+				in
+				    Tipos

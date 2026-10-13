@@ -1,0 +1,86 @@
+table Pedidos
+
+	/// Pedidos emitidos.
+	measure Pedidos = COUNTROWS(Pedidos)
+		formatString: #,0
+		displayFolder: Pedidos
+
+	measure 'Pedidos facturados' = CALCULATE(COUNTROWS(Pedidos), Pedidos[estado] = "FACTURADO")
+		formatString: #,0
+		displayFolder: Pedidos
+
+	measure 'Pedidos rechazados o cancelados' = CALCULATE(COUNTROWS(Pedidos), Pedidos[estado] IN { "RECHAZADO", "CANCELADO" })
+		formatString: #,0
+		displayFolder: Pedidos
+
+	/// Pedidos que terminaron facturados.
+	measure '% Conversión pedido a factura' = DIVIDE([Pedidos facturados], [Pedidos])
+		formatString: 0.0%
+		displayFolder: Pedidos
+
+	column pedido_id
+		dataType: string
+		summarizeBy: none
+		sourceColumn: pedido_id
+		isHidden
+
+	column numero
+		dataType: string
+		summarizeBy: none
+		sourceColumn: numero
+
+	column estado
+		dataType: string
+		summarizeBy: none
+		sourceColumn: estado
+
+	column fecha
+		dataType: dateTime
+		formatString: Short Date
+		summarizeBy: none
+		sourceColumn: fecha
+
+	column cliente_id
+		dataType: string
+		summarizeBy: none
+		sourceColumn: cliente_id
+		isHidden
+
+	column vendedor_id
+		dataType: string
+		summarizeBy: none
+		sourceColumn: vendedor_id
+		isHidden
+
+	column ruta_id
+		dataType: string
+		summarizeBy: none
+		sourceColumn: ruta_id
+		isHidden
+
+	column moneda
+		dataType: string
+		summarizeBy: none
+		sourceColumn: moneda
+
+	column total
+		dataType: double
+		formatString: #,0.00
+		summarizeBy: none
+		sourceColumn: total
+
+	column tomado_en_visita
+		dataType: boolean
+		summarizeBy: none
+		sourceColumn: tomado_en_visita
+
+	partition Pedidos = m
+		mode: import
+		source =
+				let
+				    Origen = PostgreSQL.Database(Servidor, BaseDatos),
+				    Vista = Origen{[Schema = "bi", Item = "v_pedidos"]}[Data],
+				    Columnas = Table.SelectColumns(Vista, {"pedido_id", "numero", "estado", "fecha", "cliente_id", "vendedor_id", "ruta_id", "moneda", "total", "tomado_en_visita"}),
+				    Tipos = Table.TransformColumnTypes(Columnas, {{"pedido_id", type text}, {"numero", type text}, {"estado", type text}, {"fecha", type date}, {"cliente_id", type text}, {"vendedor_id", type text}, {"ruta_id", type text}, {"moneda", type text}, {"total", type number}, {"tomado_en_visita", type logical}})
+				in
+				    Tipos

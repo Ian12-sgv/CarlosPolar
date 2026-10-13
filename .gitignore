@@ -1,0 +1,20 @@
+node_modules/
+dist/
+.env
+*.log
+storage/
+apps/api/src/generated/
+.expo/
+coverage/
+.expo/
+.expo-export/
+apps/api/certificados/
+
+# Clave de firma de Android: NUNCA al repositorio (respáldela aparte).
+apps/mobile/credenciales/
+apps/mobile/android/
+apps/mobile/ios/
+apps/mobile/dist/
+
+# APK generados (binarios): se distribuyen aparte, no van al repositorio.
+apk/*.apk

@@ -1,0 +1,166 @@
+// Medidas DAX del modelo Carlos Polar. Generado desde la misma especificación que el modelo TMDL.
+
+// Total facturado con IVA, convertido a USD con la tasa de cada factura.
+// Tabla: Ventas · Carpeta: Ventas · Formato: $#,0.00
+Ventas USD = SUM(Ventas[total_usd])
+
+// Base imponible facturada en USD.
+// Tabla: Ventas · Carpeta: Ventas · Formato: $#,0.00
+Ventas sin IVA USD = SUM(Ventas[subtotal_usd])
+
+// Facturas emitidas no anuladas.
+// Tabla: Ventas · Carpeta: Ventas · Formato: #,0
+Facturas = DISTINCTCOUNT(Ventas[factura_id])
+
+// Monto promedio por factura.
+// Tabla: Ventas · Carpeta: Ventas · Formato: $#,0.00
+Ticket promedio USD = DIVIDE([Ventas USD], [Facturas])
+
+// Cantidad facturada.
+// Tabla: Ventas · Carpeta: Ventas · Formato: #,0.###
+Unidades vendidas = SUM(Ventas[cantidad])
+
+// Clientes distintos con al menos una factura.
+// Tabla: Ventas · Carpeta: Ventas · Formato: #,0
+Clientes con compra = DISTINCTCOUNT(Ventas[cliente_id])
+
+// Pedidos emitidos.
+// Tabla: Pedidos · Carpeta: Pedidos · Formato: #,0
+Pedidos = COUNTROWS(Pedidos)
+
+// Tabla: Pedidos · Carpeta: Pedidos · Formato: #,0
+Pedidos facturados = CALCULATE(COUNTROWS(Pedidos), Pedidos[estado] = "FACTURADO")
+
+// Tabla: Pedidos · Carpeta: Pedidos · Formato: #,0
+Pedidos rechazados o cancelados = CALCULATE(COUNTROWS(Pedidos), Pedidos[estado] IN { "RECHAZADO", "CANCELADO" })
+
+// Pedidos que terminaron facturados.
+// Tabla: Pedidos · Carpeta: Pedidos · Formato: 0.0%
+% Conversión pedido a factura = DIVIDE([Pedidos facturados], [Pedidos])
+
+// Tabla: Embudo · Carpeta: Embudo · Formato: #,0.###
+Unidades solicitadas = SUM(Embudo[solicitado])
+
+// Tabla: Embudo · Carpeta: Embudo · Formato: #,0.###
+Unidades facturadas = SUM(Embudo[facturado])
+
+// Tabla: Embudo · Carpeta: Embudo · Formato: #,0.###
+Unidades cargadas = SUM(Embudo[cargado])
+
+// Tabla: Embudo · Carpeta: Embudo · Formato: #,0.###
+Unidades entregadas = SUM(Embudo[entregado])
+
+// Lo pedido que no llegó a facturarse (faltantes de stock o ajustes).
+// Tabla: Embudo · Carpeta: Embudo · Formato: #,0.###
+Faltante en facturación = [Unidades solicitadas] - [Unidades facturadas]
+
+// Fill rate: entregado sobre solicitado.
+// Tabla: Embudo · Carpeta: Embudo · Formato: 0.0%
+% Cumplimiento del pedido = DIVIDE([Unidades entregadas], [Unidades solicitadas])
+
+// Desde que el preventista emite hasta que Ventas aprueba.
+// Tabla: Tiempos · Carpeta: Tiempos · Formato: #,0.0
+Horas de aprobación (prom.) = AVERAGE(Tiempos[horas_aprobacion])
+
+// Desde la aprobación hasta la carga en el camión.
+// Tabla: Tiempos · Carpeta: Tiempos · Formato: #,0.0
+Horas de preparación (prom.) = AVERAGE(Tiempos[horas_preparacion])
+
+// Desde la carga hasta la entrega confirmada.
+// Tabla: Tiempos · Carpeta: Tiempos · Formato: #,0.0
+Horas de reparto (prom.) = AVERAGE(Tiempos[horas_reparto])
+
+// Desde el pedido hasta la entrega.
+// Tabla: Tiempos · Carpeta: Tiempos · Formato: #,0.0
+Horas de ciclo total (prom.) = AVERAGE(Tiempos[horas_ciclo_total])
+
+// Tabla: Entregas · Carpeta: Entregas · Formato: #,0
+Entregas confirmadas = CALCULATE(COUNTROWS(Entregas), Entregas[estado] = "CONFIRMADA")
+
+// Tabla: Entregas · Carpeta: Entregas · Formato: #,0
+Entregas rechazadas = CALCULATE(COUNTROWS(Entregas), Entregas[estado] = "RECHAZADA")
+
+// Las entregas anuladas (correcciones) no cuentan.
+// Tabla: Entregas · Carpeta: Entregas · Formato: 0.0%
+% Entregas exitosas = DIVIDE([Entregas confirmadas], [Entregas confirmadas] + [Entregas rechazadas])
+
+// Distancia entre el GPS de la entrega y la ubicación registrada del cliente.
+// Tabla: Entregas · Carpeta: Entregas · Formato: #,0
+Distancia al cliente (prom. m) = CALCULATE(AVERAGE(Entregas[distancia_cliente_metros]), Entregas[estado] = "CONFIRMADA")
+
+// Saldo oficial por cobrar (solo descuenta pagos validados).
+// Tabla: Cartera · Carpeta: Cartera · Formato: $#,0.00
+Cartera USD = SUM(Cartera[saldo_usd])
+
+// Tabla: Cartera · Carpeta: Cartera · Formato: $#,0.00
+Cartera vencida USD = CALCULATE([Cartera USD], Cartera[dias_vencido] > 0)
+
+// Tabla: Cartera · Carpeta: Cartera · Formato: 0.0%
+% Cartera vencida = DIVIDE([Cartera vencida USD], [Cartera USD])
+
+// Abonos registrados en campo que Administración aún no valida.
+// Tabla: Cartera · Carpeta: Cartera · Formato: $#,0.00
+Pagos por validar USD (cartera) = SUM(Cartera[por_validar_usd])
+
+// Antigüedad promedio ponderada por saldo.
+// Tabla: Cartera · Carpeta: Cartera · Formato: #,0.0
+Días vencidos (prom. ponderado) = DIVIDE(SUMX(Cartera, Cartera[saldo_usd] * Cartera[dias_vencido]), [Cartera USD])
+
+// Tabla: Pagos · Carpeta: Cobranza · Formato: $#,0.00
+Cobrado validado USD = CALCULATE(SUM(Pagos[monto_usd]), Pagos[estado] = "VALIDADO")
+
+// Tabla: Pagos · Carpeta: Cobranza · Formato: #,0
+Pagos por validar = CALCULATE(COUNTROWS(Pagos), Pagos[estado] = "REGISTRADO")
+
+// Tabla: Pagos · Carpeta: Cobranza · Formato: $#,0.00
+Pagos por validar USD = CALCULATE(SUM(Pagos[monto_usd]), Pagos[estado] = "REGISTRADO")
+
+// Tabla: Pagos · Carpeta: Cobranza · Formato: #,0
+Pagos rechazados = CALCULATE(COUNTROWS(Pagos), Pagos[estado] = "RECHAZADO")
+
+// Desde que se registra el pago hasta que Administración lo valida.
+// Tabla: Pagos · Carpeta: Cobranza · Formato: #,0.0
+Horas de validación (prom.) = AVERAGE(Pagos[horas_validacion])
+
+// Efectividad de cobranza del período (cobrado validado / facturado).
+// Tabla: Pagos · Carpeta: Cobranza · Formato: 0.0%
+Cobranza sobre ventas = DIVIDE([Cobrado validado USD], [Ventas USD])
+
+// Tabla: Existencias · Carpeta: Inventario · Formato: #,0.###
+Stock físico = SUM(Existencias[stock_fisico])
+
+// Físico menos reservado.
+// Tabla: Existencias · Carpeta: Inventario · Formato: #,0.###
+Stock disponible = SUM(Existencias[stock_disponible])
+
+// Tabla: Existencias · Carpeta: Inventario · Formato: #,0
+Productos bajo mínimo = COUNTROWS(FILTER(Existencias, Existencias[tipo_ubicacion] = "ALMACEN" && Existencias[stock_disponible] < Existencias[stock_minimo]))
+
+// Unidades vendidas en el período sobre el stock actual del almacén.
+// Tabla: Existencias · Carpeta: Inventario · Formato: #,0.00
+Rotación (ventas / stock) = DIVIDE([Unidades vendidas], CALCULATE([Stock físico], Existencias[tipo_ubicacion] = "ALMACEN"))
+
+// Faltantes (+) o sobrantes (−) registrados al cerrar rutas.
+// Tabla: Cuadre · Carpeta: Inventario · Formato: #,0.###
+Diferencia de inventario en rutas = SUM(Cuadre[faltante])
+
+// Visitas planificadas que se realizaron.
+// Tabla: Visitas · Carpeta: Visitas · Formato: 0.0%
+% Cumplimiento de visitas = DIVIDE(SUM(Visitas[planificadas_visitadas]), SUM(Visitas[planificadas]))
+
+// Visitas que terminaron en pedido o cobro.
+// Tabla: Visitas · Carpeta: Visitas · Formato: 0.0%
+% Visitas efectivas = DIVIDE(SUM(Visitas[efectivas]), SUM(Visitas[planificadas_visitadas]) + SUM(Visitas[fuera_de_plan]))
+
+// Tabla: Sincronizacion · Carpeta: Sincronización · Formato: #,0
+Operaciones móviles = SUM(Sincronizacion[operaciones])
+
+// Reenvíos reconocidos por idempotencia (señal de mala conectividad).
+// Tabla: Sincronizacion · Carpeta: Sincronización · Formato: 0.0%
+% Reintentos duplicados = DIVIDE(SUM(Sincronizacion[duplicadas]), [Operaciones móviles])
+
+// Tabla: Sincronizacion · Carpeta: Sincronización · Formato: #,0
+Conflictos y rechazos = SUM(Sincronizacion[conflictos]) + SUM(Sincronizacion[rechazadas])
+
+// Tabla: Sincronizacion · Carpeta: Sincronización · Formato: #,0
+Errores de servidor = SUM(Sincronizacion[errores])

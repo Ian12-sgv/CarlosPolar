@@ -1,0 +1,23 @@
+table Choferes
+
+	column chofer_id
+		dataType: string
+		summarizeBy: none
+		sourceColumn: chofer_id
+		isHidden
+
+	column nombre
+		dataType: string
+		summarizeBy: none
+		sourceColumn: nombre
+
+	partition Choferes = m
+		mode: import
+		source =
+				let
+				    Origen = PostgreSQL.Database(Servidor, BaseDatos),
+				    Vista = Origen{[Schema = "bi", Item = "v_dim_choferes"]}[Data],
+				    Columnas = Table.SelectColumns(Vista, {"chofer_id", "nombre"}),
+				    Tipos = Table.TransformColumnTypes(Columnas, {{"chofer_id", type text}, {"nombre", type text}})
+				in
+				    Tipos

@@ -1,0 +1,99 @@
+table Sincronizacion
+
+	measure 'Operaciones móviles' = SUM(Sincronizacion[operaciones])
+		formatString: #,0
+		displayFolder: Sincronización
+
+	/// Reenvíos reconocidos por idempotencia (señal de mala conectividad).
+	measure '% Reintentos duplicados' = DIVIDE(SUM(Sincronizacion[duplicadas]), [Operaciones móviles])
+		formatString: 0.0%
+		displayFolder: Sincronización
+
+	measure 'Conflictos y rechazos' = SUM(Sincronizacion[conflictos]) + SUM(Sincronizacion[rechazadas])
+		formatString: #,0
+		displayFolder: Sincronización
+
+	measure 'Errores de servidor' = SUM(Sincronizacion[errores])
+		formatString: #,0
+		displayFolder: Sincronización
+
+	column fecha
+		dataType: dateTime
+		formatString: Short Date
+		summarizeBy: none
+		sourceColumn: fecha
+
+	column usuario_id
+		dataType: string
+		summarizeBy: none
+		sourceColumn: usuario_id
+		isHidden
+
+	column dispositivo_id
+		dataType: string
+		summarizeBy: none
+		sourceColumn: dispositivo_id
+		isHidden
+
+	column origen
+		dataType: string
+		summarizeBy: none
+		sourceColumn: origen
+
+	column ruta
+		dataType: string
+		summarizeBy: none
+		sourceColumn: ruta
+
+	column operaciones
+		dataType: int64
+		formatString: 0
+		summarizeBy: none
+		sourceColumn: operaciones
+
+	column aceptadas
+		dataType: int64
+		formatString: 0
+		summarizeBy: none
+		sourceColumn: aceptadas
+
+	column duplicadas
+		dataType: int64
+		formatString: 0
+		summarizeBy: none
+		sourceColumn: duplicadas
+
+	column rechazadas
+		dataType: int64
+		formatString: 0
+		summarizeBy: none
+		sourceColumn: rechazadas
+
+	column conflictos
+		dataType: int64
+		formatString: 0
+		summarizeBy: none
+		sourceColumn: conflictos
+
+	column errores
+		dataType: int64
+		formatString: 0
+		summarizeBy: none
+		sourceColumn: errores
+
+	column retraso_promedio_seg
+		dataType: double
+		formatString: #,0.00
+		summarizeBy: none
+		sourceColumn: retraso_promedio_seg
+
+	partition Sincronizacion = m
+		mode: import
+		source =
+				let
+				    Origen = PostgreSQL.Database(Servidor, BaseDatos),
+				    Vista = Origen{[Schema = "bi", Item = "v_sincronizacion"]}[Data],
+				    Columnas = Table.SelectColumns(Vista, {"fecha", "usuario_id", "dispositivo_id", "origen", "ruta", "operaciones", "aceptadas", "duplicadas", "rechazadas", "conflictos", "errores", "retraso_promedio_seg"}),
+				    Tipos = Table.TransformColumnTypes(Columnas, {{"fecha", type date}, {"usuario_id", type text}, {"dispositivo_id", type text}, {"origen", type text}, {"ruta", type text}, {"operaciones", Int64.Type}, {"aceptadas", Int64.Type}, {"duplicadas", Int64.Type}, {"rechazadas", Int64.Type}, {"conflictos", Int64.Type}, {"errores", Int64.Type}, {"retraso_promedio_seg", type number}})
+				in
+				    Tipos

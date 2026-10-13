@@ -1,0 +1,118 @@
+table Ventas
+
+	/// Total facturado con IVA, convertido a USD con la tasa de cada factura.
+	measure 'Ventas USD' = SUM(Ventas[total_usd])
+		formatString: \$#,0.00
+		displayFolder: Ventas
+
+	/// Base imponible facturada en USD.
+	measure 'Ventas sin IVA USD' = SUM(Ventas[subtotal_usd])
+		formatString: \$#,0.00
+		displayFolder: Ventas
+
+	/// Facturas emitidas no anuladas.
+	measure Facturas = DISTINCTCOUNT(Ventas[factura_id])
+		formatString: #,0
+		displayFolder: Ventas
+
+	/// Monto promedio por factura.
+	measure 'Ticket promedio USD' = DIVIDE([Ventas USD], [Facturas])
+		formatString: \$#,0.00
+		displayFolder: Ventas
+
+	/// Cantidad facturada.
+	measure 'Unidades vendidas' = SUM(Ventas[cantidad])
+		formatString: #,0.###
+		displayFolder: Ventas
+
+	/// Clientes distintos con al menos una factura.
+	measure 'Clientes con compra' = DISTINCTCOUNT(Ventas[cliente_id])
+		formatString: #,0
+		displayFolder: Ventas
+
+	column factura_item_id
+		dataType: string
+		summarizeBy: none
+		sourceColumn: factura_item_id
+		isHidden
+
+	column factura_id
+		dataType: string
+		summarizeBy: none
+		sourceColumn: factura_id
+		isHidden
+
+	column numero
+		dataType: string
+		summarizeBy: none
+		sourceColumn: numero
+
+	column fecha
+		dataType: dateTime
+		formatString: Short Date
+		summarizeBy: none
+		sourceColumn: fecha
+
+	column cliente_id
+		dataType: string
+		summarizeBy: none
+		sourceColumn: cliente_id
+		isHidden
+
+	column vendedor_id
+		dataType: string
+		summarizeBy: none
+		sourceColumn: vendedor_id
+		isHidden
+
+	column ruta_id
+		dataType: string
+		summarizeBy: none
+		sourceColumn: ruta_id
+		isHidden
+
+	column producto_id
+		dataType: string
+		summarizeBy: none
+		sourceColumn: producto_id
+		isHidden
+
+	column cantidad
+		dataType: double
+		formatString: #,0.###
+		summarizeBy: none
+		sourceColumn: cantidad
+
+	column moneda
+		dataType: string
+		summarizeBy: none
+		sourceColumn: moneda
+
+	column total
+		dataType: double
+		formatString: #,0.00
+		summarizeBy: none
+		sourceColumn: total
+
+	column total_usd
+		dataType: double
+		formatString: #,0.00
+		summarizeBy: none
+		sourceColumn: total_usd
+
+	column subtotal_usd
+		dataType: double
+		formatString: #,0.00
+		summarizeBy: none
+		sourceColumn: subtotal_usd
+
+	partition Ventas = m
+		mode: import
+		source =
+				let
+				    Origen = PostgreSQL.Database(Servidor, BaseDatos),
+				    Vista = Origen{[Schema = "bi", Item = "v_ventas"]}[Data],
+				    Columnas = Table.SelectColumns(Vista, {"factura_item_id", "factura_id", "numero", "fecha", "cliente_id", "vendedor_id", "ruta_id", "producto_id", "cantidad", "moneda", "total", "total_usd", "subtotal_usd"}),
+				    Tipos = Table.TransformColumnTypes(Columnas, {{"factura_item_id", type text}, {"factura_id", type text}, {"numero", type text}, {"fecha", type date}, {"cliente_id", type text}, {"vendedor_id", type text}, {"ruta_id", type text}, {"producto_id", type text}, {"cantidad", type number}, {"moneda", type text}, {"total", type number}, {"total_usd", type number}, {"subtotal_usd", type number}})
+				in
+				    Tipos

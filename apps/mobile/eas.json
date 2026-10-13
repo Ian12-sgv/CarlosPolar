@@ -1,0 +1,12 @@
+{
+  "cli": { "version": ">= 16.0.0", "appVersionSource": "local" },
+  "build": {
+    "apk": {
+      "android": { "buildType": "apk" },
+      "env": { "CP_SERVIDOR": "https://servidor.ejemplo:3443" }
+    },
+    "produccion": {
+      "android": { "buildType": "app-bundle" }
+    }
+  }
+}

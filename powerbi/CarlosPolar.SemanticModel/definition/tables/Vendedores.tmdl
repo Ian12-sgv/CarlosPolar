@@ -1,0 +1,28 @@
+table Vendedores
+
+	column vendedor_id
+		dataType: string
+		summarizeBy: none
+		sourceColumn: vendedor_id
+		isHidden
+
+	column codigo
+		dataType: string
+		summarizeBy: none
+		sourceColumn: codigo
+
+	column nombre
+		dataType: string
+		summarizeBy: none
+		sourceColumn: nombre
+
+	partition Vendedores = m
+		mode: import
+		source =
+				let
+				    Origen = PostgreSQL.Database(Servidor, BaseDatos),
+				    Vista = Origen{[Schema = "bi", Item = "v_dim_vendedores"]}[Data],
+				    Columnas = Table.SelectColumns(Vista, {"vendedor_id", "codigo", "nombre"}),
+				    Tipos = Table.TransformColumnTypes(Columnas, {{"vendedor_id", type text}, {"codigo", type text}, {"nombre", type text}})
+				in
+				    Tipos

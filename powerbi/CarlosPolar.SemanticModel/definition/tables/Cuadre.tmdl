@@ -1,0 +1,69 @@
+table Cuadre
+
+	/// Faltantes (+) o sobrantes (−) registrados al cerrar rutas.
+	measure 'Diferencia de inventario en rutas' = SUM(Cuadre[faltante])
+		formatString: #,0.###
+		displayFolder: Inventario
+
+	column manifiesto_id
+		dataType: string
+		summarizeBy: none
+		sourceColumn: manifiesto_id
+		isHidden
+
+	column numero
+		dataType: string
+		summarizeBy: none
+		sourceColumn: numero
+
+	column estado
+		dataType: string
+		summarizeBy: none
+		sourceColumn: estado
+
+	column chofer_id
+		dataType: string
+		summarizeBy: none
+		sourceColumn: chofer_id
+		isHidden
+
+	column producto_id
+		dataType: string
+		summarizeBy: none
+		sourceColumn: producto_id
+		isHidden
+
+	column cargado
+		dataType: double
+		formatString: #,0.###
+		summarizeBy: none
+		sourceColumn: cargado
+
+	column entregado
+		dataType: double
+		formatString: #,0.###
+		summarizeBy: none
+		sourceColumn: entregado
+
+	column retornado
+		dataType: double
+		formatString: #,0.###
+		summarizeBy: none
+		sourceColumn: retornado
+
+	column faltante
+		dataType: double
+		formatString: #,0.###
+		summarizeBy: none
+		sourceColumn: faltante
+
+	partition Cuadre = m
+		mode: import
+		source =
+				let
+				    Origen = PostgreSQL.Database(Servidor, BaseDatos),
+				    Vista = Origen{[Schema = "bi", Item = "v_cuadre_manifiestos"]}[Data],
+				    Columnas = Table.SelectColumns(Vista, {"manifiesto_id", "numero", "estado", "chofer_id", "producto_id", "cargado", "entregado", "retornado", "faltante"}),
+				    Tipos = Table.TransformColumnTypes(Columnas, {{"manifiesto_id", type text}, {"numero", type text}, {"estado", type text}, {"chofer_id", type text}, {"producto_id", type text}, {"cargado", type number}, {"entregado", type number}, {"retornado", type number}, {"faltante", type number}})
+				in
+				    Tipos

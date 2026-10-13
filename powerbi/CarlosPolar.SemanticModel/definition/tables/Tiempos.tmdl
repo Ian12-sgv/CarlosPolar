@@ -1,0 +1,86 @@
+table Tiempos
+
+	/// Desde que el preventista emite hasta que Ventas aprueba.
+	measure 'Horas de aprobación (prom.)' = AVERAGE(Tiempos[horas_aprobacion])
+		formatString: #,0.0
+		displayFolder: Tiempos
+
+	/// Desde la aprobación hasta la carga en el camión.
+	measure 'Horas de preparación (prom.)' = AVERAGE(Tiempos[horas_preparacion])
+		formatString: #,0.0
+		displayFolder: Tiempos
+
+	/// Desde la carga hasta la entrega confirmada.
+	measure 'Horas de reparto (prom.)' = AVERAGE(Tiempos[horas_reparto])
+		formatString: #,0.0
+		displayFolder: Tiempos
+
+	/// Desde el pedido hasta la entrega.
+	measure 'Horas de ciclo total (prom.)' = AVERAGE(Tiempos[horas_ciclo_total])
+		formatString: #,0.0
+		displayFolder: Tiempos
+
+	column pedido_id
+		dataType: string
+		summarizeBy: none
+		sourceColumn: pedido_id
+		isHidden
+
+	column fecha
+		dataType: dateTime
+		formatString: Short Date
+		summarizeBy: none
+		sourceColumn: fecha
+
+	column vendedor_id
+		dataType: string
+		summarizeBy: none
+		sourceColumn: vendedor_id
+		isHidden
+
+	column ruta_id
+		dataType: string
+		summarizeBy: none
+		sourceColumn: ruta_id
+		isHidden
+
+	column cliente_id
+		dataType: string
+		summarizeBy: none
+		sourceColumn: cliente_id
+		isHidden
+
+	column horas_aprobacion
+		dataType: double
+		formatString: #,0.00
+		summarizeBy: none
+		sourceColumn: horas_aprobacion
+
+	column horas_preparacion
+		dataType: double
+		formatString: #,0.00
+		summarizeBy: none
+		sourceColumn: horas_preparacion
+
+	column horas_reparto
+		dataType: double
+		formatString: #,0.00
+		summarizeBy: none
+		sourceColumn: horas_reparto
+
+	column horas_ciclo_total
+		dataType: double
+		formatString: #,0.00
+		summarizeBy: none
+		sourceColumn: horas_ciclo_total
+
+	partition Tiempos = m
+		mode: import
+		source =
+				let
+				    Origen = PostgreSQL.Database(Servidor, BaseDatos),
+				    Vista = Origen{[Schema = "bi", Item = "v_tiempos_pedido"]}[Data],
+				    Columnas = Table.SelectColumns(Vista, {"pedido_id", "fecha", "vendedor_id", "ruta_id", "cliente_id", "horas_aprobacion", "horas_preparacion", "horas_reparto", "horas_ciclo_total"}),
+				    Tipos = Table.TransformColumnTypes(Columnas, {{"pedido_id", type text}, {"fecha", type date}, {"vendedor_id", type text}, {"ruta_id", type text}, {"cliente_id", type text}, {"horas_aprobacion", type number}, {"horas_preparacion", type number}, {"horas_reparto", type number}, {"horas_ciclo_total", type number}})
+				in
+				    Tipos

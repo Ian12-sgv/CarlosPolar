@@ -1,0 +1,70 @@
+table Existencias
+
+	measure 'Stock físico' = SUM(Existencias[stock_fisico])
+		formatString: #,0.###
+		displayFolder: Inventario
+
+	/// Físico menos reservado.
+	measure 'Stock disponible' = SUM(Existencias[stock_disponible])
+		formatString: #,0.###
+		displayFolder: Inventario
+
+	measure 'Productos bajo mínimo' = COUNTROWS(FILTER(Existencias, Existencias[tipo_ubicacion] = "ALMACEN" && Existencias[stock_disponible] < Existencias[stock_minimo]))
+		formatString: #,0
+		displayFolder: Inventario
+
+	/// Unidades vendidas en el período sobre el stock actual del almacén.
+	measure 'Rotación (ventas / stock)' = DIVIDE([Unidades vendidas], CALCULATE([Stock físico], Existencias[tipo_ubicacion] = "ALMACEN"))
+		formatString: #,0.00
+		displayFolder: Inventario
+
+	column producto_id
+		dataType: string
+		summarizeBy: none
+		sourceColumn: producto_id
+		isHidden
+
+	column ubicacion
+		dataType: string
+		summarizeBy: none
+		sourceColumn: ubicacion
+
+	column tipo_ubicacion
+		dataType: string
+		summarizeBy: none
+		sourceColumn: tipo_ubicacion
+
+	column stock_fisico
+		dataType: double
+		formatString: #,0.###
+		summarizeBy: none
+		sourceColumn: stock_fisico
+
+	column stock_reservado
+		dataType: double
+		formatString: #,0.###
+		summarizeBy: none
+		sourceColumn: stock_reservado
+
+	column stock_disponible
+		dataType: double
+		formatString: #,0.###
+		summarizeBy: none
+		sourceColumn: stock_disponible
+
+	column stock_minimo
+		dataType: double
+		formatString: #,0.###
+		summarizeBy: none
+		sourceColumn: stock_minimo
+
+	partition Existencias = m
+		mode: import
+		source =
+				let
+				    Origen = PostgreSQL.Database(Servidor, BaseDatos),
+				    Vista = Origen{[Schema = "bi", Item = "v_existencias"]}[Data],
+				    Columnas = Table.SelectColumns(Vista, {"producto_id", "ubicacion", "tipo_ubicacion", "stock_fisico", "stock_reservado", "stock_disponible", "stock_minimo"}),
+				    Tipos = Table.TransformColumnTypes(Columnas, {{"producto_id", type text}, {"ubicacion", type text}, {"tipo_ubicacion", type text}, {"stock_fisico", type number}, {"stock_reservado", type number}, {"stock_disponible", type number}, {"stock_minimo", type number}})
+				in
+				    Tipos

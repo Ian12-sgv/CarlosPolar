@@ -1,0 +1,121 @@
+table Cartera
+
+	/// Saldo oficial por cobrar (solo descuenta pagos validados).
+	measure 'Cartera USD' = SUM(Cartera[saldo_usd])
+		formatString: \$#,0.00
+		displayFolder: Cartera
+
+	measure 'Cartera vencida USD' = CALCULATE([Cartera USD], Cartera[dias_vencido] > 0)
+		formatString: \$#,0.00
+		displayFolder: Cartera
+
+	measure '% Cartera vencida' = DIVIDE([Cartera vencida USD], [Cartera USD])
+		formatString: 0.0%
+		displayFolder: Cartera
+
+	/// Abonos registrados en campo que Administración aún no valida.
+	measure 'Pagos por validar USD (cartera)' = SUM(Cartera[por_validar_usd])
+		formatString: \$#,0.00
+		displayFolder: Cartera
+
+	/// Antigüedad promedio ponderada por saldo.
+	measure 'Días vencidos (prom. ponderado)' = DIVIDE(SUMX(Cartera, Cartera[saldo_usd] * Cartera[dias_vencido]), [Cartera USD])
+		formatString: #,0.0
+		displayFolder: Cartera
+
+	column factura_id
+		dataType: string
+		summarizeBy: none
+		sourceColumn: factura_id
+		isHidden
+
+	column numero
+		dataType: string
+		summarizeBy: none
+		sourceColumn: numero
+
+	column cliente_id
+		dataType: string
+		summarizeBy: none
+		sourceColumn: cliente_id
+		isHidden
+
+	column vendedor_id
+		dataType: string
+		summarizeBy: none
+		sourceColumn: vendedor_id
+		isHidden
+
+	column ruta_id
+		dataType: string
+		summarizeBy: none
+		sourceColumn: ruta_id
+		isHidden
+
+	column moneda
+		dataType: string
+		summarizeBy: none
+		sourceColumn: moneda
+
+	column fecha_emision
+		dataType: dateTime
+		formatString: Short Date
+		summarizeBy: none
+		sourceColumn: fecha_emision
+
+	column fecha_vencimiento
+		dataType: dateTime
+		formatString: Short Date
+		summarizeBy: none
+		sourceColumn: fecha_vencimiento
+
+	column dias_vencido
+		dataType: int64
+		formatString: 0
+		summarizeBy: none
+		sourceColumn: dias_vencido
+
+	column estado_cobro
+		dataType: string
+		summarizeBy: none
+		sourceColumn: estado_cobro
+
+	column saldo
+		dataType: double
+		formatString: #,0.00
+		summarizeBy: none
+		sourceColumn: saldo
+
+	column saldo_usd
+		dataType: double
+		formatString: #,0.00
+		summarizeBy: none
+		sourceColumn: saldo_usd
+
+	column por_validar_usd
+		dataType: double
+		formatString: #,0.00
+		summarizeBy: none
+		sourceColumn: por_validar_usd
+
+	column tramo
+		dataType: string
+		summarizeBy: none
+		sourceColumn: tramo
+
+	column orden_tramo
+		dataType: int64
+		formatString: 0
+		summarizeBy: none
+		sourceColumn: orden_tramo
+
+	partition Cartera = m
+		mode: import
+		source =
+				let
+				    Origen = PostgreSQL.Database(Servidor, BaseDatos),
+				    Vista = Origen{[Schema = "bi", Item = "v_cartera_facturas"]}[Data],
+				    Columnas = Table.SelectColumns(Vista, {"factura_id", "numero", "cliente_id", "vendedor_id", "ruta_id", "moneda", "fecha_emision", "fecha_vencimiento", "dias_vencido", "estado_cobro", "saldo", "saldo_usd", "por_validar_usd", "tramo", "orden_tramo"}),
+				    Tipos = Table.TransformColumnTypes(Columnas, {{"factura_id", type text}, {"numero", type text}, {"cliente_id", type text}, {"vendedor_id", type text}, {"ruta_id", type text}, {"moneda", type text}, {"fecha_emision", type date}, {"fecha_vencimiento", type date}, {"dias_vencido", Int64.Type}, {"estado_cobro", type text}, {"saldo", type number}, {"saldo_usd", type number}, {"por_validar_usd", type number}, {"tramo", type text}, {"orden_tramo", Int64.Type}})
+				in
+				    Tipos

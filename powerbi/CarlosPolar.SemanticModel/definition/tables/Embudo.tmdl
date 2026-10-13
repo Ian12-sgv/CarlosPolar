@@ -1,0 +1,104 @@
+table Embudo
+
+	measure 'Unidades solicitadas' = SUM(Embudo[solicitado])
+		formatString: #,0.###
+		displayFolder: Embudo
+
+	measure 'Unidades facturadas' = SUM(Embudo[facturado])
+		formatString: #,0.###
+		displayFolder: Embudo
+
+	measure 'Unidades cargadas' = SUM(Embudo[cargado])
+		formatString: #,0.###
+		displayFolder: Embudo
+
+	measure 'Unidades entregadas' = SUM(Embudo[entregado])
+		formatString: #,0.###
+		displayFolder: Embudo
+
+	/// Lo pedido que no llegó a facturarse (faltantes de stock o ajustes).
+	measure 'Faltante en facturación' = [Unidades solicitadas] - [Unidades facturadas]
+		formatString: #,0.###
+		displayFolder: Embudo
+
+	/// Fill rate: entregado sobre solicitado.
+	measure '% Cumplimiento del pedido' = DIVIDE([Unidades entregadas], [Unidades solicitadas])
+		formatString: 0.0%
+		displayFolder: Embudo
+
+	column pedido_item_id
+		dataType: string
+		summarizeBy: none
+		sourceColumn: pedido_item_id
+		isHidden
+
+	column pedido_id
+		dataType: string
+		summarizeBy: none
+		sourceColumn: pedido_id
+		isHidden
+
+	column fecha
+		dataType: dateTime
+		formatString: Short Date
+		summarizeBy: none
+		sourceColumn: fecha
+
+	column cliente_id
+		dataType: string
+		summarizeBy: none
+		sourceColumn: cliente_id
+		isHidden
+
+	column vendedor_responsable_id
+		dataType: string
+		summarizeBy: none
+		sourceColumn: vendedor_responsable_id
+		isHidden
+
+	column producto_id
+		dataType: string
+		summarizeBy: none
+		sourceColumn: producto_id
+		isHidden
+
+	column solicitado
+		dataType: double
+		formatString: #,0.###
+		summarizeBy: none
+		sourceColumn: solicitado
+
+	column facturado
+		dataType: double
+		formatString: #,0.###
+		summarizeBy: none
+		sourceColumn: facturado
+
+	column cargado
+		dataType: double
+		formatString: #,0.###
+		summarizeBy: none
+		sourceColumn: cargado
+
+	column entregado
+		dataType: double
+		formatString: #,0.###
+		summarizeBy: none
+		sourceColumn: entregado
+
+	column rechazado
+		dataType: double
+		formatString: #,0.###
+		summarizeBy: none
+		sourceColumn: rechazado
+
+	partition Embudo = m
+		mode: import
+		source =
+				let
+				    Origen = PostgreSQL.Database(Servidor, BaseDatos),
+				    Vista = Origen{[Schema = "bi", Item = "v_embudo"]}[Data],
+				    Columnas = Table.SelectColumns(Vista, {"pedido_item_id", "pedido_id", "fecha", "cliente_id", "vendedor_responsable_id", "producto_id", "solicitado", "facturado", "cargado", "entregado", "rechazado"}),
+				    Tipos = Table.TransformColumnTypes(Columnas, {{"pedido_item_id", type text}, {"pedido_id", type text}, {"fecha", type date}, {"cliente_id", type text}, {"vendedor_responsable_id", type text}, {"producto_id", type text}, {"solicitado", type number}, {"facturado", type number}, {"cargado", type number}, {"entregado", type number}, {"rechazado", type number}})
+				in
+				    Tipos

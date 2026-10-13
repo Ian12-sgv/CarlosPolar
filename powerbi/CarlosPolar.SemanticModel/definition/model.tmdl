@@ -1,0 +1,23 @@
+model Model
+	culture: es-VE
+	defaultPowerBIDataSourceVersion: powerBI_V3
+	discourageImplicitMeasures
+	sourceQueryCulture: es-VE
+
+ref table Calendario
+ref table Clientes
+ref table Productos
+ref table Vendedores
+ref table Rutas
+ref table Choferes
+ref table Ventas
+ref table Pedidos
+ref table Embudo
+ref table Tiempos
+ref table Entregas
+ref table Cartera
+ref table Pagos
+ref table Existencias
+ref table Cuadre
+ref table Visitas
+ref table Sincronizacion

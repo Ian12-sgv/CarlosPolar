@@ -1,0 +1,15 @@
+# Alternativa a la instalación directa de PostgreSQL.
+services:
+  db:
+    image: postgres:18
+    environment:
+      POSTGRES_USER: carlos_polar
+      POSTGRES_PASSWORD: carlos_polar
+      POSTGRES_DB: carlos_polar
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql
+
+volumes:
+  pgdata:
